@@ -7,6 +7,7 @@ val BgDeep        = Color(0xFF060911)   // deepest black-navy
 val BgBase        = Color(0xFF0C0F1A)   // main bg
 val BgSurface     = Color(0xFF111827)   // card surface
 val BgElevated    = Color(0xFF1A2235)   // elevated panels
+val BgCard        = Color(0xFF161F30)   // card background
 val BgGlass       = Color(0x14FFFFFF)   // frosted glass overlay
 
 // ── Border System ─────────────────────────────────────────────────────────

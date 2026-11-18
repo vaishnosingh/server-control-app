@@ -120,6 +120,28 @@ class TriggerClient(
         })
     }
 
+    fun sendTriggerSync(device: DeviceConfig, action: TriggerAction): TriggerResponse {
+        return try {
+            val request = buildRequest(device, action)
+            val response = client.newCall(request).execute()
+            response.use {
+                val code = it.code
+                val bodyText = it.body?.string().orEmpty()
+                TriggerResponse(
+                    isSuccess = it.isSuccessful,
+                    statusCode = code,
+                    message = if (bodyText.isNotEmpty()) bodyText else "HTTP $code"
+                )
+            }
+        } catch (e: Exception) {
+            TriggerResponse(
+                isSuccess = false,
+                statusCode = -1,
+                message = e.localizedMessage ?: "Request failed"
+            )
+        }
+    }
+
     fun fetchR2Config(
         url: String,
         callback: (Result<ParsedEndpoints>) -> Unit
@@ -156,9 +178,7 @@ class TriggerClient(
         device: DeviceConfig,
         callback: (NodeStatus) -> Unit
     ) {
-        // Only use statusUrl from JSON config — no hardcoded fallback
         val baseStatusUrl = device.statusUrl.trim()
-
         if (baseStatusUrl.isBlank()) {
             runOnMain {
                 callback(NodeStatus(isOnline = false, statusText = "NO STATUS URL"))
@@ -183,64 +203,77 @@ class TriggerClient(
             }
 
             override fun onResponse(call: Call, response: Response) {
-                response.use {
+                val nodeStatus = response.use {
                     val body = it.body?.string().orEmpty().trim()
-                    if (body.startsWith("{")) {
-                        try {
-                            val json = com.google.gson.JsonParser.parseString(body).asJsonObject
-                            val online = when {
-                                json.has("online") && json.get("online").isJsonPrimitive && json.get("online").asJsonPrimitive.isBoolean ->
-                                    json.get("online").asBoolean
-                                json.has("status") && json.get("status").isJsonPrimitive ->
-                                    json.get("status").asString.equals("online", ignoreCase = true)
-                                else -> false
-                            }
-                            val ip = if (json.has("ip") && !json.get("ip").isJsonNull) json.get("ip").asString else null
-                            val uptime = when {
-                                json.has("uptime") && !json.get("uptime").isJsonNull -> json.get("uptime").asString
-                                json.has("on_since_duration") && !json.get("on_since_duration").isJsonNull -> json.get("on_since_duration").asString
-                                else -> null
-                            }
-                            val onSinceIst = if (json.has("on_since_ist") && !json.get("on_since_ist").isJsonNull) {
-                                json.get("on_since_ist").asString
-                            } else null
-                            val lastActiveAgo = if (json.has("last_active_ago") && !json.get("last_active_ago").isJsonNull) {
-                                json.get("last_active_ago").asString
-                            } else null
-                            val lastActiveIst = if (json.has("last_active_ist") && !json.get("last_active_ist").isJsonNull) {
-                                json.get("last_active_ist").asString
-                            } else null
-
-                            runOnMain {
-                                callback(
-                                    NodeStatus(
-                                        isOnline = online,
-                                        statusText = if (online) "ONLINE" else "OFFLINE",
-                                        ip = ip,
-                                        uptime = uptime,
-                                        onSinceIst = onSinceIst,
-                                        lastActiveAgo = lastActiveAgo,
-                                        lastActiveIst = lastActiveIst
-                                    )
-                                )
-                            }
-                        } catch (e: Exception) {
-                            runOnMain {
-                                callback(NodeStatus(isOnline = false, statusText = "ERROR"))
-                            }
-                        }
-                    } else if (it.isSuccessful) {
-                        val isOnline = body.equals("ONLINE", ignoreCase = true)
-                        runOnMain {
-                            callback(NodeStatus(isOnline = isOnline, statusText = if (isOnline) "ONLINE" else "OFFLINE"))
-                        }
-                    } else {
-                        runOnMain {
-                            callback(NodeStatus(isOnline = false, statusText = "OFFLINE"))
-                        }
-                    }
+                    parseNodeStatus(body, it.isSuccessful)
                 }
+                runOnMain { callback(nodeStatus) }
             }
         })
+    }
+
+    fun checkStatusSync(device: DeviceConfig): NodeStatus {
+        val baseStatusUrl = device.statusUrl.trim()
+        if (baseStatusUrl.isBlank()) {
+            return NodeStatus(isOnline = false, statusText = "NO STATUS URL")
+        }
+
+        return try {
+            val request = Request.Builder().url(baseStatusUrl).get().build()
+            val response = client.newCall(request).execute()
+            response.use {
+                val body = it.body?.string().orEmpty().trim()
+                parseNodeStatus(body, it.isSuccessful)
+            }
+        } catch (e: Exception) {
+            NodeStatus(isOnline = false, statusText = "OFFLINE")
+        }
+    }
+
+    private fun parseNodeStatus(body: String, isHttpSuccess: Boolean): NodeStatus {
+        if (body.startsWith("{")) {
+            return try {
+                val json = com.google.gson.JsonParser.parseString(body).asJsonObject
+                val online = when {
+                    json.has("online") && json.get("online").isJsonPrimitive && json.get("online").asJsonPrimitive.isBoolean ->
+                        json.get("online").asBoolean
+                    json.has("status") && json.get("status").isJsonPrimitive ->
+                        json.get("status").asString.equals("online", ignoreCase = true)
+                    else -> false
+                }
+                val ip = if (json.has("ip") && !json.get("ip").isJsonNull) json.get("ip").asString else null
+                val uptime = when {
+                    json.has("uptime") && !json.get("uptime").isJsonNull -> json.get("uptime").asString
+                    json.has("on_since_duration") && !json.get("on_since_duration").isJsonNull -> json.get("on_since_duration").asString
+                    else -> null
+                }
+                val onSinceIst = if (json.has("on_since_ist") && !json.get("on_since_ist").isJsonNull) {
+                    json.get("on_since_ist").asString
+                } else null
+                val lastActiveAgo = if (json.has("last_active_ago") && !json.get("last_active_ago").isJsonNull) {
+                    json.get("last_active_ago").asString
+                } else null
+                val lastActiveIst = if (json.has("last_active_ist") && !json.get("last_active_ist").isJsonNull) {
+                    json.get("last_active_ist").asString
+                } else null
+
+                NodeStatus(
+                    isOnline = online,
+                    statusText = if (online) "ONLINE" else "OFFLINE",
+                    ip = ip,
+                    uptime = uptime,
+                    onSinceIst = onSinceIst,
+                    lastActiveAgo = lastActiveAgo,
+                    lastActiveIst = lastActiveIst
+                )
+            } catch (e: Exception) {
+                NodeStatus(isOnline = false, statusText = "ERROR")
+            }
+        } else if (isHttpSuccess) {
+            val isOnline = body.equals("ONLINE", ignoreCase = true)
+            return NodeStatus(isOnline = isOnline, statusText = if (isOnline) "ONLINE" else "OFFLINE")
+        } else {
+            return NodeStatus(isOnline = false, statusText = "OFFLINE")
+        }
     }
 }

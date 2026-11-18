@@ -9,17 +9,38 @@ import com.google.gson.reflect.TypeToken
 interface KeyValueStorage {
     fun getString(key: String, defaultValue: String?): String?
     fun putString(key: String, value: String?)
+    fun getBoolean(key: String, defaultValue: Boolean): Boolean = defaultValue
+    fun putBoolean(key: String, value: Boolean) {}
+    fun contains(key: String): Boolean = false
+    fun remove(key: String) {}
 }
 
-class SharedPrefsStorage(context: Context) : KeyValueStorage {
+class SharedPrefsStorage(
+    context: Context,
+    prefsName: String = "device_trigger_prefs"
+) : KeyValueStorage {
     private val prefs: SharedPreferences =
-        context.getSharedPreferences("device_trigger_prefs", Context.MODE_PRIVATE)
+        context.getSharedPreferences(prefsName, Context.MODE_PRIVATE)
 
     override fun getString(key: String, defaultValue: String?): String? =
         prefs.getString(key, defaultValue)
 
     override fun putString(key: String, value: String?) {
         prefs.edit().putString(key, value).apply()
+    }
+
+    override fun getBoolean(key: String, defaultValue: Boolean): Boolean =
+        prefs.getBoolean(key, defaultValue)
+
+    override fun putBoolean(key: String, value: Boolean) {
+        prefs.edit().putBoolean(key, value).apply()
+    }
+
+    override fun contains(key: String): Boolean =
+        prefs.contains(key)
+
+    override fun remove(key: String) {
+        prefs.edit().remove(key).apply()
     }
 }
 

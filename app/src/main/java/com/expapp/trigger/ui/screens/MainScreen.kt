@@ -24,7 +24,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material3.TopAppBar
@@ -57,10 +59,19 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.expapp.trigger.BuildConfig
 import com.expapp.trigger.data.model.DeviceConfig
+import com.expapp.trigger.data.model.TriggerLog
+import com.expapp.trigger.data.repository.AppSettings
 import com.expapp.trigger.data.repository.DeviceRepository
+import com.expapp.trigger.data.repository.TriggerHistoryRepository
 import com.expapp.trigger.network.NodeStatus
 import com.expapp.trigger.network.TriggerAction
 import com.expapp.trigger.network.TriggerClient
+import com.expapp.trigger.nfc.NfcHelper
+import com.expapp.trigger.nfc.NfcTriggerPayload
+import com.expapp.trigger.security.BiometricHelper
+import com.expapp.trigger.ui.components.HistoryDialog
+import com.expapp.trigger.ui.components.NfcWriteDialog
+import com.expapp.trigger.ui.components.SettingsDialog
 import com.expapp.trigger.ui.components.UpdateDialog
 import com.expapp.trigger.ui.theme.BgBase
 import com.expapp.trigger.ui.theme.BgElevated
@@ -77,6 +88,8 @@ import com.expapp.trigger.update.DownloadState
 import com.expapp.trigger.update.ReleaseInfo
 import com.expapp.trigger.update.UpdateCheckResult
 import com.expapp.trigger.update.UpdateManager
+import com.expapp.trigger.widget.ServerWidgetProvider
+import com.expapp.trigger.worker.ServerMonitorWorker
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -86,6 +99,12 @@ import kotlinx.coroutines.launch
 fun MainScreen(
     repository: DeviceRepository,
     triggerClient: TriggerClient,
+    appSettings: AppSettings,
+    historyRepository: TriggerHistoryRepository,
+    requestBiometricAuth: (title: String, subtitle: String, onResult: (Boolean) -> Unit) -> Unit = { _, _, cb -> cb(true) },
+    nfcWriteResult: Result<Unit>? = null,
+    onStartNfcWriting: (NfcTriggerPayload) -> Unit = {},
+    onStopNfcWriting: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -113,6 +132,14 @@ fun MainScreen(
     var dismissedVersion by remember { mutableStateOf<String?>(null) }
     var downloadState by remember { mutableStateOf<DownloadState>(DownloadState.Idle) }
     var isCheckingUpdate by remember { mutableStateOf(false) }
+
+    // Dialog & Feature states
+    var showHistoryDialog by remember { mutableStateOf(false) }
+    var showSettingsDialog by remember { mutableStateOf(false) }
+    var showNfcWriteDialog by remember { mutableStateOf(false) }
+    var historyLogs by remember { mutableStateOf(historyRepository.getLogs()) }
+    var isBiometricEnabled by remember { mutableStateOf(appSettings.isBiometricEnabled) }
+    var isBgMonitorEnabled by remember { mutableStateOf(appSettings.isBackgroundMonitoringEnabled) }
 
     fun checkAppUpdate(showToast: Boolean = false) {
         isCheckingUpdate = true
@@ -203,28 +230,71 @@ fun MainScreen(
     }
 
     fun executeAction(device: DeviceConfig, action: TriggerAction) {
-        loadingStates[device.id] = true
-        statusStates.remove(device.id)
-        triggerClient.sendTrigger(device, action) { response ->
-            loadingStates[device.id] = false
-            val msg = if (response.isSuccess) {
-                when (action) {
-                    TriggerAction.POWER_ON  -> "Power on signal sent"
-                    TriggerAction.POWER_OFF -> "Shutdown signal sent"
-                    TriggerAction.REBOOT    -> "Restart signal sent"
+        val actionTitle = when (action) {
+            TriggerAction.POWER_ON -> "Power On"
+            TriggerAction.REBOOT -> "Reboot"
+            TriggerAction.POWER_OFF -> "Shutdown"
+        }
+
+        val performDispatch = {
+            loadingStates[device.id] = true
+            statusStates.remove(device.id)
+            triggerClient.sendTrigger(device, action) { response ->
+                loadingStates[device.id] = false
+                val msg = if (response.isSuccess) {
+                    when (action) {
+                        TriggerAction.POWER_ON  -> "Power on signal sent"
+                        TriggerAction.POWER_OFF -> "Shutdown signal sent"
+                        TriggerAction.REBOOT    -> "Restart signal sent"
+                    }
+                } else {
+                    val raw = response.message.trim()
+                    val clean = if (raw.startsWith("<")) "Request failed (HTTP ${response.statusCode})" else raw.take(60)
+                    "Failed — $clean"
                 }
-            } else {
-                val raw = response.message.trim()
-                val clean = if (raw.startsWith("<")) "Request failed (HTTP ${response.statusCode})" else raw.take(60)
-                "Failed — $clean"
+                statusStates[device.id] = msg to response.isSuccess
+                Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+
+                // Save to history log
+                historyRepository.addLog(
+                    TriggerLog(
+                        deviceId = device.id,
+                        deviceName = device.name,
+                        node = device.node,
+                        action = action,
+                        isSuccess = response.isSuccess,
+                        statusCode = response.statusCode,
+                        message = msg,
+                        source = "App"
+                    )
+                )
+                historyLogs = historyRepository.getLogs()
+
+                // Update home screen widgets
+                ServerWidgetProvider.updateAllWidgets(context)
+
+                coroutineScope.launch {
+                    delay(1500); refreshStatus(device, showIndicator = true)
+                    delay(4000); refreshStatus(device)
+                    delay(5000); refreshStatus(device)
+                }
             }
-            statusStates[device.id] = msg to response.isSuccess
-            Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
-            coroutineScope.launch {
-                delay(1500); refreshStatus(device, showIndicator = true)
-                delay(4000); refreshStatus(device)
-                delay(5000); refreshStatus(device)
+        }
+
+        // Biometric Security Gate
+        if (appSettings.isBiometricEnabled && BiometricHelper.isBiometricAvailable(context)) {
+            requestBiometricAuth(
+                "Confirm $actionTitle",
+                "Authenticate with fingerprint to trigger ${device.name}"
+            ) { success ->
+                if (success) {
+                    performDispatch()
+                } else {
+                    Toast.makeText(context, "Action cancelled", Toast.LENGTH_SHORT).show()
+                }
             }
+        } else {
+            performDispatch()
         }
     }
 
@@ -251,29 +321,29 @@ fun MainScreen(
                             tint = GreenVibrant,
                             modifier = Modifier.size(18.dp)
                         )
-                        Spacer(modifier = Modifier.width(8.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
                         Text(
                             text = "DEVICE TRIGGER",
-                            fontSize = 13.sp,
+                            fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
-                            letterSpacing = 1.5.sp,
+                            letterSpacing = 1.2.sp,
                             color = TextPrimary,
                             fontFamily = FontFamily.Monospace,
                             maxLines = 1
                         )
                         val onlineCount = devices.count { nodeStatuses[it.id]?.isOnline == true }
                         if (devices.isNotEmpty() && onlineCount > 0) {
-                            Spacer(modifier = Modifier.width(8.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
                             Box(
                                 modifier = Modifier
                                     .clip(CircleShape)
                                     .background(OnlineBg)
                                     .border(1.dp, OnlineBorder, CircleShape)
-                                    .padding(horizontal = 7.dp, vertical = 2.dp)
+                                    .padding(horizontal = 6.dp, vertical = 2.dp)
                             ) {
                                 Text(
-                                    "$onlineCount online",
-                                    fontSize = 10.sp,
+                                    "$onlineCount on",
+                                    fontSize = 9.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = OnlineText,
                                     letterSpacing = 0.5.sp
@@ -283,44 +353,85 @@ fun MainScreen(
                     }
                 },
                 actions = {
+                    // Update Button
                     if (availableUpdate != null) {
                         IconButton(
                             onClick = { showUpdateDialog = true },
-                            modifier = Modifier.size(40.dp)
+                            modifier = Modifier.size(36.dp)
                         ) {
                             Box(contentAlignment = Alignment.TopEnd) {
                                 Icon(
                                     Icons.Default.SystemUpdate,
                                     contentDescription = "Update available",
                                     tint = GreenVibrant,
-                                    modifier = Modifier.size(20.dp)
+                                    modifier = Modifier.size(18.dp)
                                 )
                                 Box(
                                     modifier = Modifier
-                                        .size(7.dp)
+                                        .size(6.dp)
                                         .background(GreenVibrant, CircleShape)
                                         .border(1.dp, BgSurface, CircleShape)
                                 )
                             }
                         }
                     }
+
+                    // Trigger History Button
+                    IconButton(
+                        onClick = {
+                            historyLogs = historyRepository.getLogs()
+                            showHistoryDialog = true
+                        },
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.History,
+                            contentDescription = "Trigger History",
+                            tint = TextSecondary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+
+                    // Settings Button
+                    IconButton(
+                        onClick = { showSettingsDialog = true },
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.Settings,
+                            contentDescription = "Settings",
+                            tint = TextSecondary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+
+                    // R2 Sync Button
                     IconButton(
                         onClick = { syncEndpoints(true) },
                         enabled = !isSyncing,
-                        modifier = Modifier.size(40.dp)
+                        modifier = Modifier.size(36.dp)
                     ) {
                         Icon(
                             Icons.Default.Refresh,
                             "Sync",
                             tint = if (isSyncing) TextMuted else GreenVibrant,
-                            modifier = Modifier.rotate(rotationAngle)
+                            modifier = Modifier
+                                .size(20.dp)
+                                .rotate(rotationAngle)
                         )
                     }
+
+                    // Add Device Button
                     IconButton(
                         onClick = { coroutineScope.launch { pagerState.animateScrollToPage(devices.size) } },
-                        modifier = Modifier.size(40.dp)
+                        modifier = Modifier.size(36.dp)
                     ) {
-                        Icon(Icons.Default.Add, "Add Device", tint = GreenVibrant)
+                        Icon(
+                            Icons.Default.Add,
+                            "Add Device",
+                            tint = GreenVibrant,
+                            modifier = Modifier.size(22.dp)
+                        )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -349,20 +460,26 @@ fun MainScreen(
                         }
                         Box(
                             modifier = Modifier
-                                .padding(horizontal = 3.dp)
-                                .height(6.dp)
-                                .width(if (selected) 22.dp else 6.dp)
-                                .clip(if (selected) RoundedCornerShape(3.dp) else CircleShape)
+                                .padding(horizontal = 4.dp)
+                                .size(if (selected) 8.dp else 6.dp)
+                                .clip(CircleShape)
                                 .background(dotColor)
+                                .clickable {
+                                    coroutineScope.launch {
+                                        pagerState.animateScrollToPage(i)
+                                    }
+                                }
                         )
                     }
                 }
             }
         }
-    ) { padding ->
+    ) { innerPadding ->
         HorizontalPager(
             state = pagerState,
-            modifier = Modifier.fillMaxSize().padding(padding)
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
         ) { page ->
             if (page < devices.size) {
                 val dev = devices[page]
@@ -376,35 +493,15 @@ fun MainScreen(
                     onDismissStatus = { statusStates.remove(dev.id) },
                     onRefreshStatus = { refreshStatus(dev, showIndicator = true) },
                     onTrigger = { action -> executeAction(dev, action) },
-                    onDelete = { d -> repository.deleteDevice(d.id); devices = repository.getDevices() },
-                    onSyncConfig = {
-                        triggerClient.fetchR2Config(dev.r2Url) { result ->
-                            result.onSuccess { ep ->
-                                val changed = repository.updateEndpoints(dev.id, ep.powerOn, ep.powerOff, ep.reboot, ep.status)
-                                devices = repository.getDevices()
-                                val msg = if (changed) "Endpoints updated from R2" else "Endpoints already up to date"
-                                statusStates[dev.id] = msg to true
-                                refreshStatus(dev, showIndicator = true)
-                            }.onFailure { ex ->
-                                statusStates[dev.id] = "Failed to fetch R2: ${ex.message}" to false
-                            }
-                        }
+                    onDelete = { d ->
+                        repository.deleteDevice(d.id)
+                        devices = repository.getDevices()
                     },
+                    onSyncConfig = { syncEndpoints(true) },
                     onUpdateDevice = { updated ->
                         repository.updateDevice(updated)
                         devices = repository.getDevices()
-                        if (updated.r2Url.isNotBlank() && updated.r2Url != dev.r2Url) {
-                            triggerClient.fetchR2Config(updated.r2Url) { result ->
-                                result.onSuccess { ep ->
-                                    repository.updateEndpoints(updated.id, ep.powerOn, ep.powerOff, ep.reboot, ep.status)
-                                    devices = repository.getDevices()
-                                    statusStates[updated.id] = "Device & endpoints updated" to true
-                                    refreshStatus(updated, showIndicator = true)
-                                }
-                            }
-                        } else {
-                            statusStates[updated.id] = "Device updated" to true
-                        }
+                        refreshStatus(updated, showIndicator = true)
                     }
                 )
             } else {
@@ -424,6 +521,69 @@ fun MainScreen(
         }
     }
 
+    // Trigger History Dialog
+    if (showHistoryDialog) {
+        HistoryDialog(
+            logs = historyLogs,
+            onClearOlderThan = { millis ->
+                historyRepository.clearOlderThan(millis)
+                historyLogs = historyRepository.getLogs()
+            },
+            onClearAll = {
+                historyRepository.clearAll()
+                historyLogs = emptyList()
+            },
+            onDismiss = { showHistoryDialog = false }
+        )
+    }
+
+    // Settings Dialog
+    if (showSettingsDialog) {
+        SettingsDialog(
+            isBiometricEnabled = isBiometricEnabled,
+            onBiometricToggled = { enabled ->
+                isBiometricEnabled = enabled
+                appSettings.isBiometricEnabled = enabled
+            },
+            isBgMonitorEnabled = isBgMonitorEnabled,
+            onBgMonitorToggled = { enabled ->
+                isBgMonitorEnabled = enabled
+                appSettings.isBackgroundMonitoringEnabled = enabled
+                if (enabled) {
+                    ServerMonitorWorker.createNotificationChannel(context)
+                    ServerMonitorWorker.schedule(context)
+                } else {
+                    ServerMonitorWorker.cancel(context)
+                }
+            },
+            isBiometricAvailable = BiometricHelper.isBiometricAvailable(context),
+            isNfcAvailable = NfcHelper.isNfcSupported(context),
+            onOpenNfcWriter = {
+                showNfcWriteDialog = true
+            },
+            onDismiss = { showSettingsDialog = false }
+        )
+    }
+
+    // NFC Write Tag Dialog
+    if (showNfcWriteDialog) {
+        NfcWriteDialog(
+            devices = devices,
+            writeResult = nfcWriteResult,
+            onStartWriting = { payload ->
+                onStartNfcWriting(payload)
+            },
+            onStopWriting = {
+                onStopNfcWriting()
+            },
+            onDismiss = {
+                onStopNfcWriting()
+                showNfcWriteDialog = false
+            }
+        )
+    }
+
+    // Update Dialog
     if (showUpdateDialog && availableUpdate != null) {
         UpdateDialog(
             releaseInfo = availableUpdate!!,
