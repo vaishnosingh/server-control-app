@@ -1,0 +1,67 @@
+package com.expapp.trigger.data.repository
+
+import com.expapp.trigger.data.model.DeviceConfig
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Before
+import org.junit.Test
+
+class DeviceRepositoryTest {
+
+    private class FakeKeyValueStorage : KeyValueStorage {
+        private val data = mutableMapOf<String, String?>()
+        override fun getString(key: String, defaultValue: String?): String? = data[key] ?: defaultValue
+        override fun putString(key: String, value: String?) {
+            data[key] = value
+        }
+    }
+
+    private lateinit var storage: FakeKeyValueStorage
+    private lateinit var repository: DeviceRepository
+
+    @Before
+    fun setup() {
+        storage = FakeKeyValueStorage()
+        repository = DeviceRepository(storage)
+    }
+
+    @Test
+    fun getDevices_whenEmpty_returnsEmptyList() {
+        val devices = repository.getDevices()
+        assertTrue(devices.isEmpty())
+    }
+
+    @Test
+    fun addDevice_savesAndReturnsDevice() {
+        val device = DeviceConfig(
+            id = "dev-1",
+            name = "Debian Server",
+            node = "debian",
+            secretKey = "Carbon@12",
+            r2Url = "https://r2.example.com/config.json",
+            powerOnUrl = "https://cosmos.linuxguy.space/poweron",
+            powerOffUrl = "https://cosmos.linuxguy.space/poweroff",
+            rebootUrl = "https://cosmos.linuxguy.space/reboot"
+        )
+
+        repository.addDevice(device)
+        val devices = repository.getDevices()
+        assertEquals(1, devices.size)
+        assertEquals(device, devices[0])
+    }
+
+    @Test
+    fun deleteDevice_removesDeviceById() {
+        val d1 = DeviceConfig(id = "1", name = "D1", node = "n1", secretKey = "k1", r2Url = "", powerOnUrl = "", powerOffUrl = "", rebootUrl = "")
+        val d2 = DeviceConfig(id = "2", name = "D2", node = "n2", secretKey = "k2", r2Url = "", powerOnUrl = "", powerOffUrl = "", rebootUrl = "")
+
+        repository.addDevice(d1)
+        repository.addDevice(d2)
+        assertEquals(2, repository.getDevices().size)
+
+        repository.deleteDevice("1")
+        val remaining = repository.getDevices()
+        assertEquals(1, remaining.size)
+        assertEquals("2", remaining[0].id)
+    }
+}
