@@ -47,7 +47,8 @@ class UpdateManager(
         currentVersionName: String,
         callback: (UpdateCheckResult) -> Unit
     ) {
-        val url = "https://api.github.com/repos/$githubRepo/releases/latest"
+        // Query releases list so we always inspect the highest semantic version
+        val url = "https://api.github.com/repos/$githubRepo/releases"
 
         val request = Request.Builder()
             .url(url)
@@ -78,49 +79,73 @@ class UpdateManager(
 
                     val body = res.body?.string().orEmpty()
                     try {
-                        val json = JsonParser.parseString(body).asJsonObject
-                        val tagName = json.get("tag_name")?.asString.orEmpty()
-                        val title = json.get("name")?.asString?.ifBlank { tagName } ?: tagName
-                        val changelog = json.get("body")?.asString.orEmpty()
+                        val jsonElement = JsonParser.parseString(body)
+                        val releasesArray = if (jsonElement.isJsonArray) {
+                            jsonElement.asJsonArray
+                        } else {
+                            // In case a single release object was returned
+                            val arr = com.google.gson.JsonArray()
+                            if (jsonElement.isJsonObject) arr.add(jsonElement.asJsonObject)
+                            arr
+                        }
 
-                        val assets = json.getAsJsonArray("assets")
-                        var apkUrl: String? = null
-                        var apkName = "app-release.apk"
-                        var apkSize = 0L
+                        var highestRelease: ReleaseInfo? = null
 
-                        if (assets != null) {
-                            for (element in assets) {
-                                val assetObj = element.asJsonObject
-                                val name = assetObj.get("name")?.asString.orEmpty()
-                                if (name.endsWith(".apk", ignoreCase = true)) {
-                                    apkUrl = assetObj.get("browser_download_url")?.asString
-                                    apkName = name
-                                    apkSize = assetObj.get("size")?.asLong ?: 0L
-                                    break
+                        for (item in releasesArray) {
+                            if (!item.isJsonObject) continue
+                            val json = item.asJsonObject
+                            if (json.has("draft") && json.get("draft").asBoolean) continue
+
+                            val tagName = json.get("tag_name")?.asString.orEmpty()
+                            val cleanVer = tagName.removePrefix("v").removePrefix("V").trim()
+                            val title = json.get("name")?.asString?.ifBlank { tagName } ?: tagName
+                            val changelog = json.get("body")?.asString.orEmpty()
+
+                            val assets = json.getAsJsonArray("assets")
+                            var apkUrl: String? = null
+                            var apkName = "app-release.apk"
+                            var apkSize = 0L
+
+                            if (assets != null) {
+                                for (element in assets) {
+                                    val assetObj = element.asJsonObject
+                                    val name = assetObj.get("name")?.asString.orEmpty()
+                                    if (name.endsWith(".apk", ignoreCase = true)) {
+                                        apkUrl = assetObj.get("browser_download_url")?.asString
+                                        apkName = name
+                                        apkSize = assetObj.get("size")?.asLong ?: 0L
+                                        break
+                                    }
+                                }
+                            }
+
+                            if (!apkUrl.isNullOrBlank()) {
+                                val releaseInfo = ReleaseInfo(
+                                    tagName = tagName,
+                                    versionName = cleanVer,
+                                    title = title,
+                                    changelog = changelog,
+                                    downloadUrl = apkUrl,
+                                    apkFileName = apkName,
+                                    sizeBytes = apkSize
+                                )
+
+                                if (highestRelease == null || isNewerVersion(cleanVer, highestRelease.versionName)) {
+                                    highestRelease = releaseInfo
                                 }
                             }
                         }
 
-                        if (apkUrl.isNullOrBlank()) {
+                        if (highestRelease == null) {
                             runOnMain { callback(UpdateCheckResult.UpToDate) }
                             return
                         }
 
-                        val cleanRemoteVersion = tagName.removePrefix("v").removePrefix("V").trim()
                         val cleanLocalVersion = currentVersionName.removePrefix("v").removePrefix("V").trim()
 
-                        if (isNewerVersion(cleanRemoteVersion, cleanLocalVersion)) {
-                            val releaseInfo = ReleaseInfo(
-                                tagName = tagName,
-                                versionName = cleanRemoteVersion,
-                                title = title,
-                                changelog = changelog,
-                                downloadUrl = apkUrl,
-                                apkFileName = apkName,
-                                sizeBytes = apkSize
-                            )
+                        if (isNewerVersion(highestRelease.versionName, cleanLocalVersion)) {
                             runOnMain {
-                                callback(UpdateCheckResult.UpdateAvailable(releaseInfo))
+                                callback(UpdateCheckResult.UpdateAvailable(highestRelease))
                             }
                         } else {
                             runOnMain { callback(UpdateCheckResult.UpToDate) }
