@@ -92,6 +92,7 @@ import com.expapp.trigger.update.ReleaseInfo
 import com.expapp.trigger.update.UpdateCheckResult
 import com.expapp.trigger.update.UpdateManager
 import com.expapp.trigger.widget.ServerWidgetProvider
+import com.expapp.trigger.worker.ActionTriggerWorker
 import com.expapp.trigger.worker.ServerMonitorWorker
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -283,45 +284,22 @@ fun MainScreen(
         val performDispatch = {
             loadingStates[device.id] = true
             statusStates.remove(device.id)
-            triggerClient.sendTrigger(device, action) { response ->
-                loadingStates[device.id] = false
-                val msg = if (response.isSuccess) {
-                    when (action) {
-                        TriggerAction.POWER_ON  -> "Power on signal sent"
-                        TriggerAction.POWER_OFF -> "Shutdown signal sent"
-                        TriggerAction.REBOOT    -> "Restart signal sent"
-                    }
-                } else {
-                    val raw = response.message.trim()
-                    val clean = if (raw.startsWith("<")) "Request failed (HTTP ${response.statusCode})" else raw.take(60)
-                    "Failed — $clean"
-                }
-                statusStates[device.id] = msg to response.isSuccess
-                Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, "Sending $actionTitle signal to ${device.name}...", Toast.LENGTH_SHORT).show()
 
-                // Save to history log
-                historyRepository.addLog(
-                    TriggerLog(
-                        deviceId = device.id,
-                        deviceName = device.name,
-                        node = device.node,
-                        action = action,
-                        isSuccess = response.isSuccess,
-                        statusCode = response.statusCode,
-                        message = msg,
-                        source = "App"
-                    )
-                )
+            // Enqueue guaranteed background worker: executes HTTP request, sends notifications, updates widgets & monitors transition
+            ActionTriggerWorker.enqueue(context, device.id, action, "App")
+
+            // In foreground, refresh UI smoothly after short intervals if user stays in the app
+            coroutineScope.launch {
+                delay(2000)
+                refreshStatus(device, showIndicator = true)
                 historyLogs = historyRepository.getLogs()
-
-                // Update home screen widgets
-                ServerWidgetProvider.updateAllWidgets(context)
-
-                coroutineScope.launch {
-                    delay(1500); refreshStatus(device, showIndicator = true)
-                    delay(4000); refreshStatus(device)
-                    delay(5000); refreshStatus(device)
-                }
+                loadingStates[device.id] = false
+                delay(3000)
+                refreshStatus(device, showIndicator = false)
+                historyLogs = historyRepository.getLogs()
+                delay(4000)
+                refreshStatus(device, showIndicator = false)
             }
         }
 

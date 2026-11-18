@@ -38,6 +38,7 @@ import com.expapp.trigger.ui.screens.MainScreen
 import com.expapp.trigger.ui.theme.DarkBackground
 import com.expapp.trigger.ui.theme.ExpAppTheme
 import com.expapp.trigger.widget.ServerWidgetProvider
+import com.expapp.trigger.worker.ActionTriggerWorker
 import com.expapp.trigger.worker.NotificationHelper
 import com.expapp.trigger.worker.ServerMonitorWorker
 
@@ -265,27 +266,7 @@ class MainActivity : FragmentActivity() {
         val onAuthorized = {
             vibrateFeedback(true)
             Toast.makeText(this, "Sending $actionName signal to ${device.name}...", Toast.LENGTH_SHORT).show()
-            triggerClient.sendTrigger(device, action) { response ->
-                val msg = if (response.isSuccess) {
-                    "$actionName signal sent successfully"
-                } else {
-                    "Failed: ${response.message.take(50)}"
-                }
-                Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
-                historyRepository.addLog(
-                    TriggerLog(
-                        deviceId = device.id,
-                        deviceName = device.name,
-                        node = device.node,
-                        action = action,
-                        isSuccess = response.isSuccess,
-                        statusCode = response.statusCode,
-                        message = response.message,
-                        source = source
-                    )
-                )
-                ServerWidgetProvider.updateAllWidgets(this)
-            }
+            ActionTriggerWorker.enqueue(this, device.id, action, source)
         }
 
         if (appSettings.isBiometricEnabled && BiometricHelper.isBiometricAvailable(this)) {

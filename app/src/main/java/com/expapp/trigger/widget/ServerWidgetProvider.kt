@@ -22,6 +22,7 @@ import com.expapp.trigger.data.repository.TriggerHistoryRepository
 import com.expapp.trigger.network.NodeStatus
 import com.expapp.trigger.network.TriggerAction
 import com.expapp.trigger.network.TriggerClient
+import com.expapp.trigger.worker.ActionTriggerWorker
 import java.util.concurrent.Executors
 
 class ServerWidgetProvider : AppWidgetProvider() {
@@ -95,41 +96,9 @@ class ServerWidgetProvider : AppWidgetProvider() {
                     }
                     context.startActivity(launchIntent)
                 } else {
-                    // Biometric disabled: execute directly in background
-                    executor.execute {
-                        val repository = DeviceRepository(SharedPrefsStorage(context))
-                        val device = repository.getDevices().find { it.id == deviceId } ?: return@execute
-                        val client = TriggerClient()
-
-                        val response = client.sendTriggerSync(device, action)
-                        val historyRepo = TriggerHistoryRepository(context)
-                        historyRepo.addLog(
-                            TriggerLog(
-                                deviceId = device.id,
-                                deviceName = device.name,
-                                node = device.node,
-                                action = action,
-                                isSuccess = response.isSuccess,
-                                statusCode = response.statusCode,
-                                message = response.message,
-                                source = "Widget"
-                            )
-                        )
-
-                        mainHandler.post {
-                            val msg = if (response.isSuccess) {
-                                when (action) {
-                                    TriggerAction.POWER_ON -> "Power on sent to ${device.name}"
-                                    TriggerAction.REBOOT -> "Restart sent to ${device.name}"
-                                    TriggerAction.POWER_OFF -> "Shutdown sent to ${device.name}"
-                                }
-                            } else {
-                                "Failed: ${response.message.take(40)}"
-                            }
-                            Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
-                            updateAllWidgets(context)
-                        }
-                    }
+                    // Biometric disabled: execute via guaranteed background worker
+                    Toast.makeText(context, "Sending ${action.name} signal...", Toast.LENGTH_SHORT).show()
+                    ActionTriggerWorker.enqueue(context, deviceId, action, "Widget")
                 }
             }
 
