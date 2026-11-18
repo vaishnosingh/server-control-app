@@ -27,7 +27,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material.icons.filled.Terminal
-import androidx.compose.material3.CenterAlignedTopAppBar
+import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -239,33 +239,37 @@ fun MainScreen(
         modifier = modifier.fillMaxSize(),
         containerColor = BgBase,
         topBar = {
-            CenterAlignedTopAppBar(
+            TopAppBar(
                 title = {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(start = 2.dp)
+                    ) {
                         Icon(
                             Icons.Default.Terminal,
                             contentDescription = null,
                             tint = GreenVibrant,
                             modifier = Modifier.size(18.dp)
                         )
-                        Spacer(modifier = Modifier.width(10.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
                         Text(
                             text = "DEVICE TRIGGER",
-                            fontSize = 14.sp,
+                            fontSize = 13.sp,
                             fontWeight = FontWeight.Bold,
-                            letterSpacing = 2.sp,
+                            letterSpacing = 1.5.sp,
                             color = TextPrimary,
-                            fontFamily = FontFamily.Monospace
+                            fontFamily = FontFamily.Monospace,
+                            maxLines = 1
                         )
                         val onlineCount = devices.count { nodeStatuses[it.id]?.isOnline == true }
                         if (devices.isNotEmpty() && onlineCount > 0) {
-                            Spacer(modifier = Modifier.width(10.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
                             Box(
                                 modifier = Modifier
                                     .clip(CircleShape)
                                     .background(OnlineBg)
                                     .border(1.dp, OnlineBorder, CircleShape)
-                                    .padding(horizontal = 8.dp, vertical = 2.dp)
+                                    .padding(horizontal = 7.dp, vertical = 2.dp)
                             ) {
                                 Text(
                                     "$onlineCount online",
@@ -280,27 +284,31 @@ fun MainScreen(
                 },
                 actions = {
                     if (availableUpdate != null) {
-                        Row(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(GreenVibrant.copy(alpha = 0.15f))
-                                .border(1.dp, GreenVibrant.copy(alpha = 0.4f), RoundedCornerShape(8.dp))
-                                .clickable { showUpdateDialog = true }
-                                .padding(horizontal = 8.dp, vertical = 5.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                        IconButton(
+                            onClick = { showUpdateDialog = true },
+                            modifier = Modifier.size(40.dp)
                         ) {
-                            Icon(Icons.Default.SystemUpdate, null, tint = GreenVibrant, modifier = Modifier.size(13.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                "v${availableUpdate!!.versionName}",
-                                color = GreenVibrant,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold
-                            )
+                            Box(contentAlignment = Alignment.TopEnd) {
+                                Icon(
+                                    Icons.Default.SystemUpdate,
+                                    contentDescription = "Update available",
+                                    tint = GreenVibrant,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Box(
+                                    modifier = Modifier
+                                        .size(7.dp)
+                                        .background(GreenVibrant, CircleShape)
+                                        .border(1.dp, BgSurface, CircleShape)
+                                )
+                            }
                         }
-                        Spacer(modifier = Modifier.width(4.dp))
                     }
-                    IconButton(onClick = { syncEndpoints(true) }, enabled = !isSyncing) {
+                    IconButton(
+                        onClick = { syncEndpoints(true) },
+                        enabled = !isSyncing,
+                        modifier = Modifier.size(40.dp)
+                    ) {
                         Icon(
                             Icons.Default.Refresh,
                             "Sync",
@@ -309,12 +317,13 @@ fun MainScreen(
                         )
                     }
                     IconButton(
-                        onClick = { coroutineScope.launch { pagerState.animateScrollToPage(devices.size) } }
+                        onClick = { coroutineScope.launch { pagerState.animateScrollToPage(devices.size) } },
+                        modifier = Modifier.size(40.dp)
                     ) {
                         Icon(Icons.Default.Add, "Add Device", tint = GreenVibrant)
                     }
                 },
-                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = BgSurface
                 )
             )
