@@ -23,21 +23,34 @@ class TriggerClient(
     private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
 
     fun buildRequest(device: DeviceConfig, action: TriggerAction): Request {
-        val targetUrl = when (action) {
-            TriggerAction.POWER_ON -> device.powerOnUrl
-            TriggerAction.POWER_OFF -> device.powerOffUrl
-            TriggerAction.REBOOT -> device.rebootUrl
+        return when (action) {
+            TriggerAction.POWER_ON -> {
+                Request.Builder()
+                    .url(device.powerOnUrl)
+                    .get()
+                    .build()
+            }
+            TriggerAction.POWER_OFF -> {
+                val jsonPayload = """{"node":"${device.node}"}"""
+                val body = jsonPayload.toRequestBody(jsonMediaType)
+                Request.Builder()
+                    .url(device.powerOffUrl)
+                    .addHeader("Content-Type", "application/json")
+                    .addHeader("X-Secret-Key", device.secretKey)
+                    .post(body)
+                    .build()
+            }
+            TriggerAction.REBOOT -> {
+                val jsonPayload = """{"node":"${device.node}"}"""
+                val body = jsonPayload.toRequestBody(jsonMediaType)
+                Request.Builder()
+                    .url(device.rebootUrl)
+                    .addHeader("Content-Type", "application/json")
+                    .addHeader("X-Secret-Key", device.secretKey)
+                    .post(body)
+                    .build()
+            }
         }
-
-        val jsonPayload = """{"node":"${device.node}"}"""
-        val body = jsonPayload.toRequestBody(jsonMediaType)
-
-        return Request.Builder()
-            .url(targetUrl)
-            .addHeader("Content-Type", "application/json")
-            .addHeader("X-Secret-Key", device.secretKey)
-            .post(body)
-            .build()
     }
 
     fun sendTrigger(

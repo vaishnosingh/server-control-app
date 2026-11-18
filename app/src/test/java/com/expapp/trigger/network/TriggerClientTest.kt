@@ -64,12 +64,13 @@ class TriggerClientTest {
     }
 
     @Test
-    fun buildRequest_powerOn_usesPowerOnUrl() {
+    fun buildRequest_powerOn_usesGetMethodWithoutSecretKey() {
         val request = client.buildRequest(sampleDevice, TriggerAction.POWER_ON)
 
-        assertEquals("POST", request.method)
+        assertEquals("GET", request.method)
         assertEquals("https://cosmos.linuxguy.space/poweron", request.url.toString())
-        assertEquals("Carbon@12", request.header("X-Secret-Key"))
+        org.junit.Assert.assertNull(request.header("X-Secret-Key"))
+        org.junit.Assert.assertNull(request.body)
     }
 
     @Test
