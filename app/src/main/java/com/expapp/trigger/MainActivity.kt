@@ -38,6 +38,7 @@ import com.expapp.trigger.ui.screens.MainScreen
 import com.expapp.trigger.ui.theme.DarkBackground
 import com.expapp.trigger.ui.theme.ExpAppTheme
 import com.expapp.trigger.widget.ServerWidgetProvider
+import com.expapp.trigger.worker.NotificationHelper
 import com.expapp.trigger.worker.ServerMonitorWorker
 
 class MainActivity : FragmentActivity() {
@@ -50,12 +51,40 @@ class MainActivity : FragmentActivity() {
     private var activeNfcWritePayload by mutableStateOf<NfcTriggerPayload?>(null)
     private var nfcWriteResult by mutableStateOf<Result<Unit>?>(null)
 
+    private var isNotificationPermissionGranted by mutableStateOf(false)
+    private var onNotificationPermissionGrantedCallback: (() -> Unit)? = null
+
     private val notificationPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
-            if (isGranted && appSettings.isBackgroundMonitoringEnabled) {
-                ServerMonitorWorker.schedule(this)
+            isNotificationPermissionGranted = isGranted || NotificationHelper.areNotificationsEnabled(this)
+            if (isGranted) {
+                NotificationHelper.createNotificationChannel(this)
+                if (appSettings.isBackgroundMonitoringEnabled) {
+                    ServerMonitorWorker.schedule(this)
+                }
+                onNotificationPermissionGrantedCallback?.invoke()
+            } else {
+                Toast.makeText(this, "Notification permission is required for alerts", Toast.LENGTH_SHORT).show()
             }
+            onNotificationPermissionGrantedCallback = null
         }
+
+    fun requestNotificationPermission(onGranted: () -> Unit = {}) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
+                == PackageManager.PERMISSION_GRANTED
+            ) {
+                isNotificationPermissionGranted = true
+                onGranted()
+            } else {
+                onNotificationPermissionGrantedCallback = onGranted
+                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        } else {
+            isNotificationPermissionGranted = NotificationHelper.areNotificationsEnabled(this)
+            onGranted()
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -65,6 +94,9 @@ class MainActivity : FragmentActivity() {
         triggerClient = TriggerClient()
         appSettings = AppSettings(applicationContext)
         historyRepository = TriggerHistoryRepository(applicationContext)
+
+        NotificationHelper.createNotificationChannel(this)
+        isNotificationPermissionGranted = NotificationHelper.areNotificationsEnabled(this)
 
         // Request notification permission on Android 13+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -77,7 +109,6 @@ class MainActivity : FragmentActivity() {
 
         // Initialize background server monitoring
         if (appSettings.isBackgroundMonitoringEnabled) {
-            ServerMonitorWorker.createNotificationChannel(this)
             ServerMonitorWorker.schedule(this)
         }
 
@@ -100,6 +131,18 @@ class MainActivity : FragmentActivity() {
                                 onResult(success)
                             }
                         },
+                        isNotificationPermissionGranted = isNotificationPermissionGranted,
+                        onRequestNotificationPermission = {
+                            requestNotificationPermission()
+                        },
+                        onSendTestNotification = {
+                            val ok = NotificationHelper.sendTestNotification(this)
+                            if (ok) {
+                                Toast.makeText(this, "Test notification sent!", Toast.LENGTH_SHORT).show()
+                            } else {
+                                Toast.makeText(this, "Notification failed to send. Check system permissions.", Toast.LENGTH_LONG).show()
+                            }
+                        },
                         nfcWriteResult = nfcWriteResult,
                         onStartNfcWriting = { payload ->
                             nfcWriteResult = null
@@ -117,6 +160,7 @@ class MainActivity : FragmentActivity() {
 
     override fun onResume() {
         super.onResume()
+        isNotificationPermissionGranted = NotificationHelper.areNotificationsEnabled(this)
         if (NfcHelper.isNfcSupported(this)) {
             NfcHelper.enableForegroundDispatch(this)
         }
@@ -126,6 +170,15 @@ class MainActivity : FragmentActivity() {
         super.onPause()
         if (NfcHelper.isNfcSupported(this)) {
             NfcHelper.disableForegroundDispatch(this)
+        }
+    }
+
+    override fun onStop() {
+        super.onStop()
+        // When leaving the app, trigger an immediate one-time check & ensure worker is scheduled
+        if (appSettings.isBackgroundMonitoringEnabled) {
+            ServerMonitorWorker.runOnce(this)
+            ServerMonitorWorker.schedule(this)
         }
     }
 

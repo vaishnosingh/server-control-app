@@ -15,6 +15,8 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -274,10 +276,12 @@ fun DevicePage(
     )
 
     val isOnline = nodeStatus?.isOnline
+    val scrollState = rememberScrollState()
 
     Column(
         modifier = modifier
             .fillMaxSize()
+            .verticalScroll(scrollState)
             .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {

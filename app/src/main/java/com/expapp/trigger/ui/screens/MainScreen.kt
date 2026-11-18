@@ -21,7 +21,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.ExperimentalMaterialApi
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.History
@@ -29,12 +29,15 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material.icons.filled.Terminal
-import androidx.compose.material3.TopAppBar
+import androidx.compose.material.pullrefresh.PullRefreshIndicator
+import androidx.compose.material.pullrefresh.pullRefresh
+import androidx.compose.material.pullrefresh.rememberPullRefreshState
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -94,7 +97,11 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
+@OptIn(
+    ExperimentalFoundationApi::class,
+    ExperimentalMaterial3Api::class,
+    ExperimentalMaterialApi::class
+)
 @Composable
 fun MainScreen(
     repository: DeviceRepository,
@@ -102,6 +109,9 @@ fun MainScreen(
     appSettings: AppSettings,
     historyRepository: TriggerHistoryRepository,
     requestBiometricAuth: (title: String, subtitle: String, onResult: (Boolean) -> Unit) -> Unit = { _, _, cb -> cb(true) },
+    isNotificationPermissionGranted: Boolean = true,
+    onRequestNotificationPermission: () -> Unit = {},
+    onSendTestNotification: () -> Unit = {},
     nfcWriteResult: Result<Unit>? = null,
     onStartNfcWriting: (NfcTriggerPayload) -> Unit = {},
     onStopNfcWriting: () -> Unit = {},
@@ -141,36 +151,12 @@ fun MainScreen(
     var isBiometricEnabled by remember { mutableStateOf(appSettings.isBiometricEnabled) }
     var isBgMonitorEnabled by remember { mutableStateOf(appSettings.isBackgroundMonitoringEnabled) }
 
-    fun checkAppUpdate(showToast: Boolean = false) {
-        isCheckingUpdate = true
-        updateManager.checkForUpdate(BuildConfig.VERSION_NAME) { result ->
-            isCheckingUpdate = false
-            when (result) {
-                is UpdateCheckResult.UpdateAvailable -> {
-                    availableUpdate = result.info
-                    if (showToast || dismissedVersion != result.info.versionName) {
-                        showUpdateDialog = true
-                    }
-                }
-                is UpdateCheckResult.UpToDate -> {
-                    if (showToast) {
-                        Toast.makeText(context, "App is up to date (v${BuildConfig.VERSION_NAME})", Toast.LENGTH_SHORT).show()
-                    }
-                }
-                is UpdateCheckResult.Error -> {
-                    if (showToast) {
-                        Toast.makeText(context, "Update check failed: ${result.message}", Toast.LENGTH_SHORT).show()
-                    }
-                }
-            }
-        }
-    }
-
     val loadingStates     = remember { mutableStateMapOf<String, Boolean>() }
     val statusStates      = remember { mutableStateMapOf<String, Pair<String, Boolean>>() }
     val nodeStatuses      = remember { mutableStateMapOf<String, NodeStatus>() }
     val checkingStatusMap = remember { mutableStateMapOf<String, Boolean>() }
     var isSyncing by remember { mutableStateOf(false) }
+    var isPullRefreshing by remember { mutableStateOf(false) }
 
     fun refreshStatus(device: DeviceConfig, showIndicator: Boolean = false) {
         if (showIndicator || nodeStatuses[device.id] == null) {
@@ -179,6 +165,8 @@ fun MainScreen(
         triggerClient.checkStatus(device) { status ->
             checkingStatusMap[device.id] = false
             nodeStatuses[device.id] = status
+            // Keep background monitoring synced with the latest live status
+            appSettings.setLastStatus(device.id, status.isOnline)
         }
     }
 
@@ -210,6 +198,60 @@ fun MainScreen(
             }
         }
     }
+
+    fun checkAppUpdate(showToast: Boolean = false) {
+        isCheckingUpdate = true
+        updateManager.checkForUpdate(BuildConfig.VERSION_NAME) { result ->
+            isCheckingUpdate = false
+            when (result) {
+                is UpdateCheckResult.UpdateAvailable -> {
+                    availableUpdate = result.info
+                    if (showToast || dismissedVersion != result.info.versionName) {
+                        showUpdateDialog = true
+                    }
+                }
+                is UpdateCheckResult.UpToDate -> {
+                    if (showToast) {
+                        Toast.makeText(context, "App is up to date (v${BuildConfig.VERSION_NAME})", Toast.LENGTH_SHORT).show()
+                    }
+                }
+                is UpdateCheckResult.Error -> {
+                    if (showToast) {
+                        Toast.makeText(context, "Update check failed: ${result.message}", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+        }
+    }
+
+    // Pull-to-refresh entire page handler
+    fun refreshWholePage() {
+        isPullRefreshing = true
+        coroutineScope.launch {
+            // 1. Sync R2 endpoints
+            syncEndpoints(showToast = false)
+
+            // 2. Poll status for all configured devices
+            devices.forEach { dev ->
+                refreshStatus(dev, showIndicator = true)
+            }
+
+            // 3. Check for app updates
+            checkAppUpdate(showToast = false)
+
+            // 4. Update home screen widgets
+            ServerWidgetProvider.updateAllWidgets(context)
+
+            delay(750)
+            isPullRefreshing = false
+            Toast.makeText(context, "Page refreshed", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    val pullRefreshState = rememberPullRefreshState(
+        refreshing = isPullRefreshing,
+        onRefresh = { refreshWholePage() }
+    )
 
     // Initial R2 sync and update check on launch
     LaunchedEffect(Unit) {
@@ -475,49 +517,63 @@ fun MainScreen(
             }
         }
     ) { innerPadding ->
-        HorizontalPager(
-            state = pagerState,
+        // Pull to refresh container enclosing HorizontalPager
+        Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-        ) { page ->
-            if (page < devices.size) {
-                val dev = devices[page]
-                DevicePage(
-                    device = dev,
-                    isLoading = loadingStates[dev.id] == true,
-                    nodeStatus = nodeStatuses[dev.id],
-                    isCheckingStatus = checkingStatusMap[dev.id] == true,
-                    lastStatus = statusStates[dev.id]?.first,
-                    lastSuccess = statusStates[dev.id]?.second,
-                    onDismissStatus = { statusStates.remove(dev.id) },
-                    onRefreshStatus = { refreshStatus(dev, showIndicator = true) },
-                    onTrigger = { action -> executeAction(dev, action) },
-                    onDelete = { d ->
-                        repository.deleteDevice(d.id)
-                        devices = repository.getDevices()
-                    },
-                    onSyncConfig = { syncEndpoints(true) },
-                    onUpdateDevice = { updated ->
-                        repository.updateDevice(updated)
-                        devices = repository.getDevices()
-                        refreshStatus(updated, showIndicator = true)
-                    }
-                )
-            } else {
-                AddDevicePage(
-                    triggerClient = triggerClient,
-                    onDeviceAdded = { newDev ->
-                        repository.addDevice(newDev)
-                        devices = repository.getDevices()
-                        refreshStatus(newDev, showIndicator = true)
-                        coroutineScope.launch {
-                            val idx = devices.indexOfFirst { it.id == newDev.id }
-                            if (idx >= 0) pagerState.animateScrollToPage(idx)
+                .pullRefresh(pullRefreshState)
+        ) {
+            HorizontalPager(
+                state = pagerState,
+                modifier = Modifier.fillMaxSize()
+            ) { page ->
+                if (page < devices.size) {
+                    val dev = devices[page]
+                    DevicePage(
+                        device = dev,
+                        isLoading = loadingStates[dev.id] == true,
+                        nodeStatus = nodeStatuses[dev.id],
+                        isCheckingStatus = checkingStatusMap[dev.id] == true,
+                        lastStatus = statusStates[dev.id]?.first,
+                        lastSuccess = statusStates[dev.id]?.second,
+                        onDismissStatus = { statusStates.remove(dev.id) },
+                        onRefreshStatus = { refreshStatus(dev, showIndicator = true) },
+                        onTrigger = { action -> executeAction(dev, action) },
+                        onDelete = { d ->
+                            repository.deleteDevice(d.id)
+                            devices = repository.getDevices()
+                        },
+                        onSyncConfig = { syncEndpoints(true) },
+                        onUpdateDevice = { updated ->
+                            repository.updateDevice(updated)
+                            devices = repository.getDevices()
+                            refreshStatus(updated, showIndicator = true)
                         }
-                    }
-                )
+                    )
+                } else {
+                    AddDevicePage(
+                        triggerClient = triggerClient,
+                        onDeviceAdded = { newDev ->
+                            repository.addDevice(newDev)
+                            devices = repository.getDevices()
+                            refreshStatus(newDev, showIndicator = true)
+                            coroutineScope.launch {
+                                val idx = devices.indexOfFirst { it.id == newDev.id }
+                                if (idx >= 0) pagerState.animateScrollToPage(idx)
+                            }
+                        }
+                    )
+                }
             }
+
+            PullRefreshIndicator(
+                refreshing = isPullRefreshing,
+                state = pullRefreshState,
+                modifier = Modifier.align(Alignment.TopCenter),
+                backgroundColor = BgElevated,
+                contentColor = GreenVibrant
+            )
         }
     }
 
@@ -550,7 +606,6 @@ fun MainScreen(
                 isBgMonitorEnabled = enabled
                 appSettings.isBackgroundMonitoringEnabled = enabled
                 if (enabled) {
-                    ServerMonitorWorker.createNotificationChannel(context)
                     ServerMonitorWorker.schedule(context)
                 } else {
                     ServerMonitorWorker.cancel(context)
@@ -558,6 +613,9 @@ fun MainScreen(
             },
             isBiometricAvailable = BiometricHelper.isBiometricAvailable(context),
             isNfcAvailable = NfcHelper.isNfcSupported(context),
+            isNotificationPermissionGranted = isNotificationPermissionGranted,
+            onRequestNotificationPermission = onRequestNotificationPermission,
+            onSendTestNotification = onSendTestNotification,
             onOpenNfcWriter = {
                 showNfcWriteDialog = true
             },

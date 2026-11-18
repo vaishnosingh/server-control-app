@@ -1,5 +1,9 @@
 package com.expapp.trigger.ui.components
 
+import android.content.Intent
+import android.net.Uri
+import android.os.Build
+import android.provider.Settings
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -19,7 +23,11 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.Nfc
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Surface
@@ -30,17 +38,20 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.expapp.trigger.BuildConfig
+import com.expapp.trigger.ui.theme.AmberVibrant
 import com.expapp.trigger.ui.theme.BgCard
 import com.expapp.trigger.ui.theme.BgElevated
 import com.expapp.trigger.ui.theme.BgSurface
 import com.expapp.trigger.ui.theme.BorderSubtle
 import com.expapp.trigger.ui.theme.GreenVibrant
+import com.expapp.trigger.ui.theme.RedVibrant
 import com.expapp.trigger.ui.theme.TextMuted
 import com.expapp.trigger.ui.theme.TextPrimary
 import com.expapp.trigger.ui.theme.TextSecondary
@@ -53,9 +64,14 @@ fun SettingsDialog(
     onBgMonitorToggled: (Boolean) -> Unit,
     isBiometricAvailable: Boolean,
     isNfcAvailable: Boolean,
+    isNotificationPermissionGranted: Boolean,
+    onRequestNotificationPermission: () -> Unit,
+    onSendTestNotification: () -> Unit,
     onOpenNfcWriter: () -> Unit,
     onDismiss: () -> Unit
 ) {
+    val context = LocalContext.current
+
     Dialog(onDismissRequest = onDismiss) {
         Surface(
             modifier = Modifier.fillMaxWidth(0.95f),
@@ -151,7 +167,7 @@ fun SettingsDialog(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // Background Monitor Setting
+                // Background Monitor Setting Card
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -160,41 +176,118 @@ fun SettingsDialog(
                         .border(1.dp, BorderSubtle, RoundedCornerShape(14.dp))
                         .padding(14.dp)
                 ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            Icons.Default.Notifications,
-                            contentDescription = null,
-                            tint = if (isBgMonitorEnabled) GreenVibrant else TextMuted,
-                            modifier = Modifier.size(28.dp)
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                "Server Status Alerts",
-                                color = TextPrimary,
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.SemiBold
+                    Column {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Default.Notifications,
+                                contentDescription = null,
+                                tint = if (isBgMonitorEnabled && isNotificationPermissionGranted) GreenVibrant else TextMuted,
+                                modifier = Modifier.size(28.dp)
                             )
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                "Notify outside app if servers go offline or online",
-                                color = TextMuted,
-                                fontSize = 11.sp
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    "Server Status Alerts",
+                                    color = TextPrimary,
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    "Alert outside app when servers go offline or online",
+                                    color = TextMuted,
+                                    fontSize = 11.sp
+                                )
+                            }
+                            Switch(
+                                checked = isBgMonitorEnabled,
+                                onCheckedChange = { enabled ->
+                                    if (enabled && !isNotificationPermissionGranted) {
+                                        onRequestNotificationPermission()
+                                    }
+                                    onBgMonitorToggled(enabled)
+                                },
+                                colors = SwitchDefaults.colors(
+                                    checkedThumbColor = GreenVibrant,
+                                    checkedTrackColor = GreenVibrant.copy(alpha = 0.3f),
+                                    uncheckedThumbColor = TextMuted,
+                                    uncheckedTrackColor = BgElevated
+                                )
                             )
                         }
-                        Switch(
-                            checked = isBgMonitorEnabled,
-                            onCheckedChange = { onBgMonitorToggled(it) },
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = GreenVibrant,
-                                checkedTrackColor = GreenVibrant.copy(alpha = 0.3f),
-                                uncheckedThumbColor = TextMuted,
-                                uncheckedTrackColor = BgElevated
+
+                        // Warning banner if notification permission is blocked
+                        if (isBgMonitorEnabled && !isNotificationPermissionGranted) {
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(AmberVibrant.copy(alpha = 0.12f))
+                                    .border(1.dp, AmberVibrant.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
+                                    .clickable {
+                                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                            onRequestNotificationPermission()
+                                        } else {
+                                            val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+                                                putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                                            }
+                                            context.startActivity(intent)
+                                        }
+                                    }
+                                    .padding(8.dp)
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        Icons.Default.Warning,
+                                        contentDescription = null,
+                                        tint = AmberVibrant,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        "Notification permission missing. Tap to enable.",
+                                        color = AmberVibrant,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                }
+                            }
+                        }
+
+                        // Send Test Notification button
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Button(
+                            onClick = {
+                                if (!isNotificationPermissionGranted) {
+                                    onRequestNotificationPermission()
+                                } else {
+                                    onSendTestNotification()
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (isNotificationPermissionGranted) GreenVibrant.copy(alpha = 0.15f) else AmberVibrant.copy(alpha = 0.15f)
+                            ),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(
+                                Icons.Default.NotificationsActive,
+                                contentDescription = null,
+                                tint = if (isNotificationPermissionGranted) GreenVibrant else AmberVibrant,
+                                modifier = Modifier.size(16.dp)
                             )
-                        )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = if (isNotificationPermissionGranted) "Send Test Notification" else "Grant Permission & Test",
+                                color = if (isNotificationPermissionGranted) GreenVibrant else AmberVibrant,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
                     }
                 }
 
