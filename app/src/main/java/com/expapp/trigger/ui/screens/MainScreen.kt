@@ -110,6 +110,7 @@ fun MainScreen(
     val updateManager = remember { UpdateManager(context) }
     var availableUpdate by remember { mutableStateOf<ReleaseInfo?>(null) }
     var showUpdateDialog by remember { mutableStateOf(false) }
+    var dismissedVersion by remember { mutableStateOf<String?>(null) }
     var downloadState by remember { mutableStateOf<DownloadState>(DownloadState.Idle) }
     var isCheckingUpdate by remember { mutableStateOf(false) }
 
@@ -120,7 +121,9 @@ fun MainScreen(
             when (result) {
                 is UpdateCheckResult.UpdateAvailable -> {
                     availableUpdate = result.info
-                    showUpdateDialog = true
+                    if (showToast || dismissedVersion != result.info.versionName) {
+                        showUpdateDialog = true
+                    }
                 }
                 is UpdateCheckResult.UpToDate -> {
                     if (showToast) {
@@ -154,16 +157,12 @@ fun MainScreen(
 
     fun syncEndpoints(showToast: Boolean = false) {
         val current = repository.getDevices()
-        if (current.isEmpty()) {
-            checkAppUpdate(showToast)
-            return
-        }
+        if (current.isEmpty()) return
         isSyncing = true
         var updated = 0; var completed = 0
         val total = current.count { it.r2Url.isNotBlank() }
         if (total == 0) {
             isSyncing = false
-            checkAppUpdate(showToast)
             return
         }
         current.filter { it.r2Url.isNotBlank() }.forEach { device ->
@@ -180,7 +179,6 @@ fun MainScreen(
                         if (updated > 0) "Endpoints updated" else "Already up to date",
                         Toast.LENGTH_SHORT
                     ).show()
-                    checkAppUpdate(showToast)
                 }
             }
         }
@@ -429,9 +427,11 @@ fun MainScreen(
                 }
             },
             onInstall = { file ->
+                showUpdateDialog = false
                 updateManager.installApk(file)
             },
             onDismiss = {
+                dismissedVersion = availableUpdate?.versionName
                 showUpdateDialog = false
             }
         )
