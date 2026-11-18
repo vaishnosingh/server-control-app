@@ -54,6 +54,29 @@ class DeviceRepository(private val storage: KeyValueStorage) {
         addDevice(device)
     }
 
+    fun updateEndpoints(
+        deviceId: String,
+        powerOnUrl: String,
+        powerOffUrl: String,
+        rebootUrl: String
+    ): Boolean {
+        val current = getDevices().toMutableList()
+        val index = current.indexOfFirst { it.id == deviceId }
+        if (index != -1) {
+            val old = current[index]
+            if (old.powerOnUrl != powerOnUrl || old.powerOffUrl != powerOffUrl || old.rebootUrl != rebootUrl) {
+                current[index] = old.copy(
+                    powerOnUrl = powerOnUrl,
+                    powerOffUrl = powerOffUrl,
+                    rebootUrl = rebootUrl
+                )
+                saveDevices(current)
+                return true
+            }
+        }
+        return false
+    }
+
     private fun saveDevices(devices: List<DeviceConfig>) {
         val json = gson.toJson(devices)
         storage.putString(storageKey, json)

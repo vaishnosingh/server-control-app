@@ -21,6 +21,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Dns
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -71,6 +72,59 @@ fun MainScreen(
     val loadingStates = remember { mutableStateMapOf<String, Boolean>() }
     // Device ID -> Pair(StatusMessage, IsSuccess)
     val statusStates = remember { mutableStateMapOf<String, Pair<String, Boolean>>() }
+    var isSyncing by remember { mutableStateOf(false) }
+
+    fun syncEndpoints(showToast: Boolean = false) {
+        val currentDevices = repository.getDevices()
+        if (currentDevices.isEmpty()) return
+        isSyncing = true
+        var updatedCount = 0
+        var completedCount = 0
+        val totalToSync = currentDevices.count { it.r2Url.isNotBlank() }
+
+        if (totalToSync == 0) {
+            isSyncing = false
+            return
+        }
+
+        currentDevices.forEach { device ->
+            if (device.r2Url.isNotBlank()) {
+                triggerClient.fetchR2Config(device.r2Url) { result ->
+                    completedCount++
+                    result.onSuccess { endpoints ->
+                        val changed = repository.updateEndpoints(
+                            deviceId = device.id,
+                            powerOnUrl = endpoints.powerOn,
+                            powerOffUrl = endpoints.powerOff,
+                            rebootUrl = endpoints.reboot
+                        )
+                        if (changed) {
+                            updatedCount++
+                            devices = repository.getDevices()
+                        }
+                    }
+
+                    if (completedCount == totalToSync) {
+                        isSyncing = false
+                        if (showToast) {
+                            if (updatedCount > 0) {
+                                Toast.makeText(context, "Updated endpoints for $updatedCount device(s)", Toast.LENGTH_SHORT).show()
+                            } else {
+                                Toast.makeText(context, "All device endpoints are up to date", Toast.LENGTH_SHORT).show()
+                            }
+                        } else if (updatedCount > 0) {
+                            Toast.makeText(context, "Synced: Updated endpoints from Cloudflare R2", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Automatically check Cloudflare R2 on every app launch
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        syncEndpoints(showToast = false)
+    }
 
     fun executeAction(device: DeviceConfig, action: TriggerAction) {
         val actionLabel = when (action) {
@@ -122,6 +176,18 @@ fun MainScreen(
                     }
                 },
                 actions = {
+                    // Manual sync check
+                    IconButton(
+                        onClick = { syncEndpoints(showToast = true) },
+                        enabled = !isSyncing
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Refresh,
+                            contentDescription = "Sync Endpoints",
+                            tint = if (isSyncing) TextSecondary.copy(alpha = 0.5f) else PowerOnGreen
+                        )
+                    }
+
                     // Quick jump to Add Device tab
                     IconButton(
                         onClick = {

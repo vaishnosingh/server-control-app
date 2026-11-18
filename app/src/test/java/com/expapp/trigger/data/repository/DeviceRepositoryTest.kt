@@ -64,4 +64,56 @@ class DeviceRepositoryTest {
         assertEquals(1, remaining.size)
         assertEquals("2", remaining[0].id)
     }
+
+    @Test
+    fun updateEndpoints_whenEndpointsChange_updatesDeviceAndReturnsTrue() {
+        val device = DeviceConfig(
+            id = "dev-1",
+            name = "Debian Server",
+            node = "debian",
+            secretKey = "Carbon@12",
+            r2Url = "https://r2.example.com/config.json",
+            powerOnUrl = "https://old.url/on",
+            powerOffUrl = "https://old.url/off",
+            rebootUrl = "https://old.url/reboot"
+        )
+        repository.addDevice(device)
+
+        val updated = repository.updateEndpoints(
+            deviceId = "dev-1",
+            powerOnUrl = "https://new.url/on",
+            powerOffUrl = "https://new.url/off",
+            rebootUrl = "https://new.url/reboot"
+        )
+
+        assertTrue(updated)
+        val saved = repository.getDevices().first { it.id == "dev-1" }
+        assertEquals("https://new.url/on", saved.powerOnUrl)
+        assertEquals("https://new.url/off", saved.powerOffUrl)
+        assertEquals("https://new.url/reboot", saved.rebootUrl)
+    }
+
+    @Test
+    fun updateEndpoints_whenEndpointsIdentical_returnsFalse() {
+        val device = DeviceConfig(
+            id = "dev-1",
+            name = "Debian Server",
+            node = "debian",
+            secretKey = "Carbon@12",
+            r2Url = "https://r2.example.com/config.json",
+            powerOnUrl = "https://same.url/on",
+            powerOffUrl = "https://same.url/off",
+            rebootUrl = "https://same.url/reboot"
+        )
+        repository.addDevice(device)
+
+        val updated = repository.updateEndpoints(
+            deviceId = "dev-1",
+            powerOnUrl = "https://same.url/on",
+            powerOffUrl = "https://same.url/off",
+            rebootUrl = "https://same.url/reboot"
+        )
+
+        org.junit.Assert.assertFalse(updated)
+    }
 }
