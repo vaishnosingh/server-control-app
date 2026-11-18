@@ -11,3 +11,10 @@ data class TriggerResponse(
     val statusCode: Int,
     val message: String
 )
+
+data class NodeStatus(
+    val isOnline: Boolean,
+    val statusText: String,
+    val ip: String? = null,
+    val timestamp: Long = System.currentTimeMillis()
+)

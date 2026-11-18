@@ -58,17 +58,20 @@ class DeviceRepository(private val storage: KeyValueStorage) {
         deviceId: String,
         powerOnUrl: String,
         powerOffUrl: String,
-        rebootUrl: String
+        rebootUrl: String,
+        statusUrl: String = ""
     ): Boolean {
         val current = getDevices().toMutableList()
         val index = current.indexOfFirst { it.id == deviceId }
         if (index != -1) {
             val old = current[index]
-            if (old.powerOnUrl != powerOnUrl || old.powerOffUrl != powerOffUrl || old.rebootUrl != rebootUrl) {
+            val effectiveStatusUrl = if (statusUrl.isNotBlank()) statusUrl else old.statusUrl
+            if (old.powerOnUrl != powerOnUrl || old.powerOffUrl != powerOffUrl || old.rebootUrl != rebootUrl || old.statusUrl != effectiveStatusUrl) {
                 current[index] = old.copy(
                     powerOnUrl = powerOnUrl,
                     powerOffUrl = powerOffUrl,
-                    rebootUrl = rebootUrl
+                    rebootUrl = rebootUrl,
+                    statusUrl = effectiveStatusUrl
                 )
                 saveDevices(current)
                 return true

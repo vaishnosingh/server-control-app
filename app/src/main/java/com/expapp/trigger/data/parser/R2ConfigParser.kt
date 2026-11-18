@@ -5,7 +5,8 @@ import com.google.gson.JsonParser
 data class ParsedEndpoints(
     val powerOn: String,
     val powerOff: String,
-    val reboot: String
+    val reboot: String,
+    val status: String = ""
 )
 
 object R2ConfigParser {
@@ -41,10 +42,16 @@ object R2ConfigParser {
                 ?: normalizedMap["reset"]
                 ?: throw IllegalArgumentException("Missing required endpoint key: 'reboot'")
 
+            val status = normalizedMap["status"]
+                ?: normalizedMap["ping"]
+                ?: normalizedMap["health"]
+                ?: ""
+
             ParsedEndpoints(
                 powerOn = powerOn,
                 powerOff = powerOff,
-                reboot = reboot
+                reboot = reboot,
+                status = status
             )
         }
     }

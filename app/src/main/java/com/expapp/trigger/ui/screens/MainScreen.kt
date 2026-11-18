@@ -3,6 +3,7 @@ package com.expapp.trigger.ui.screens
 import android.widget.Toast
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -30,6 +31,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -46,13 +48,21 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.expapp.trigger.data.model.DeviceConfig
 import com.expapp.trigger.data.repository.DeviceRepository
+import com.expapp.trigger.network.NodeStatus
 import com.expapp.trigger.network.TriggerAction
 import com.expapp.trigger.network.TriggerClient
 import com.expapp.trigger.ui.theme.DarkBackground
+import com.expapp.trigger.ui.theme.DarkCardBorder
 import com.expapp.trigger.ui.theme.DarkSurface
+import com.expapp.trigger.ui.theme.DarkSurfaceVariant
+import com.expapp.trigger.ui.theme.PowerOnBorder
 import com.expapp.trigger.ui.theme.PowerOnGreen
+import com.expapp.trigger.ui.theme.StatusOnlineBg
+import com.expapp.trigger.ui.theme.StatusOnlineBorder
+import com.expapp.trigger.ui.theme.StatusOnlineText
 import com.expapp.trigger.ui.theme.TextPrimary
 import com.expapp.trigger.ui.theme.TextSecondary
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
@@ -72,7 +82,20 @@ fun MainScreen(
     val loadingStates = remember { mutableStateMapOf<String, Boolean>() }
     // Device ID -> Pair(StatusMessage, IsSuccess)
     val statusStates = remember { mutableStateMapOf<String, Pair<String, Boolean>>() }
+    // Device ID -> Live NodeStatus (online / offline / ip)
+    val nodeStatuses = remember { mutableStateMapOf<String, NodeStatus>() }
+    // Device ID -> Is Checking Status
+    val checkingStatusMap = remember { mutableStateMapOf<String, Boolean>() }
+
     var isSyncing by remember { mutableStateOf(false) }
+
+    fun refreshDeviceStatus(device: DeviceConfig) {
+        checkingStatusMap[device.id] = true
+        triggerClient.checkStatus(device) { status ->
+            checkingStatusMap[device.id] = false
+            nodeStatuses[device.id] = status
+        }
+    }
 
     fun syncEndpoints(showToast: Boolean = false) {
         val currentDevices = repository.getDevices()
@@ -84,10 +107,15 @@ fun MainScreen(
 
         if (totalToSync == 0) {
             isSyncing = false
+            // Still check ping/status for all devices
+            currentDevices.forEach { refreshDeviceStatus(it) }
             return
         }
 
         currentDevices.forEach { device ->
+            // Trigger status check simultaneously
+            refreshDeviceStatus(device)
+
             if (device.r2Url.isNotBlank()) {
                 triggerClient.fetchR2Config(device.r2Url) { result ->
                     completedCount++
@@ -96,7 +124,8 @@ fun MainScreen(
                             deviceId = device.id,
                             powerOnUrl = endpoints.powerOn,
                             powerOffUrl = endpoints.powerOff,
-                            rebootUrl = endpoints.reboot
+                            rebootUrl = endpoints.reboot,
+                            statusUrl = endpoints.status
                         )
                         if (changed) {
                             updatedCount++
@@ -121,9 +150,18 @@ fun MainScreen(
         }
     }
 
-    // Automatically check Cloudflare R2 on every app launch
-    androidx.compose.runtime.LaunchedEffect(Unit) {
+    // Automatically check Cloudflare R2 and device status on every app launch
+    LaunchedEffect(Unit) {
         syncEndpoints(showToast = false)
+        devices.forEach { refreshDeviceStatus(it) }
+    }
+
+    // Auto-refresh status when swiping to a device
+    LaunchedEffect(pagerState.currentPage) {
+        val page = pagerState.currentPage
+        if (page < devices.size) {
+            refreshDeviceStatus(devices[page])
+        }
     }
 
     fun executeAction(device: DeviceConfig, action: TriggerAction) {
@@ -150,6 +188,12 @@ fun MainScreen(
                 if (response.isSuccess) "$actionLabel successful (${response.statusCode})" else "Failed: ${response.message}",
                 Toast.LENGTH_SHORT
             ).show()
+
+            // Re-check live status after action
+            coroutineScope.launch {
+                delay(2000)
+                refreshDeviceStatus(device)
+            }
         }
     }
 
@@ -160,19 +204,49 @@ fun MainScreen(
             CenterAlignedTopAppBar(
                 title = {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Default.Dns,
-                            contentDescription = null,
-                            tint = PowerOnGreen,
-                            modifier = Modifier.size(24.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
+                        Box(
+                            modifier = Modifier
+                                .size(34.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(DarkSurfaceVariant)
+                                .border(1.dp, DarkCardBorder, RoundedCornerShape(10.dp)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Dns,
+                                contentDescription = null,
+                                tint = PowerOnBorder,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(10.dp))
                         Text(
-                            text = "Device Trigger",
-                            fontSize = 20.sp,
-                            fontWeight = FontWeight.Bold,
+                            text = "DEVICE TRIGGER",
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            letterSpacing = 1.sp,
                             color = TextPrimary
                         )
+
+                        // Online counter badge if devices exist
+                        val onlineCount = devices.count { nodeStatuses[it.id]?.isOnline == true }
+                        if (devices.isNotEmpty()) {
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(if (onlineCount > 0) StatusOnlineBg else DarkSurfaceVariant)
+                                    .border(1.dp, if (onlineCount > 0) StatusOnlineBorder else DarkCardBorder, RoundedCornerShape(12.dp))
+                                    .padding(horizontal = 7.dp, vertical = 2.dp)
+                            ) {
+                                Text(
+                                    text = "$onlineCount online",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (onlineCount > 0) StatusOnlineText else TextSecondary
+                                )
+                            }
+                        }
                     }
                 },
                 actions = {
@@ -184,7 +258,7 @@ fun MainScreen(
                         Icon(
                             imageVector = Icons.Default.Refresh,
                             contentDescription = "Sync Endpoints",
-                            tint = if (isSyncing) TextSecondary.copy(alpha = 0.5f) else PowerOnGreen
+                            tint = if (isSyncing) TextSecondary.copy(alpha = 0.5f) else PowerOnBorder
                         )
                     }
 
@@ -199,7 +273,7 @@ fun MainScreen(
                         Icon(
                             imageVector = Icons.Default.Add,
                             contentDescription = "Add Device",
-                            tint = PowerOnGreen
+                            tint = PowerOnBorder
                         )
                     }
                 },
@@ -227,13 +301,13 @@ fun MainScreen(
                             modifier = Modifier
                                 .padding(horizontal = 4.dp)
                                 .height(8.dp)
-                                .width(if (isSelected) 22.dp else 8.dp)
+                                .width(if (isSelected) 24.dp else 8.dp)
                                 .clip(if (isSelected) RoundedCornerShape(4.dp) else CircleShape)
                                 .background(
                                     when {
-                                        isSelected -> PowerOnGreen
+                                        isSelected -> PowerOnBorder
                                         isAddPage -> TextSecondary.copy(alpha = 0.5f)
-                                        else -> TextSecondary.copy(alpha = 0.3f)
+                                        else -> TextSecondary.copy(alpha = 0.25f)
                                     }
                                 )
                         )
@@ -256,9 +330,12 @@ fun MainScreen(
                 DevicePage(
                     device = currentDevice,
                     isLoading = isLoading,
+                    nodeStatus = nodeStatuses[currentDevice.id],
+                    isCheckingStatus = checkingStatusMap[currentDevice.id] == true,
                     lastStatus = statusInfo?.first,
                     lastSuccess = statusInfo?.second,
                     onDismissStatus = { statusStates.remove(currentDevice.id) },
+                    onRefreshStatus = { refreshDeviceStatus(currentDevice) },
                     onTrigger = { action -> executeAction(currentDevice, action) },
                     onDelete = { dev ->
                         repository.deleteDevice(dev.id)
@@ -271,6 +348,7 @@ fun MainScreen(
                     onDeviceAdded = { newDevice ->
                         repository.addDevice(newDevice)
                         devices = repository.getDevices()
+                        refreshDeviceStatus(newDevice)
                         coroutineScope.launch {
                             val newPageIndex = devices.indexOfFirst { it.id == newDevice.id }
                             if (newPageIndex >= 0) {

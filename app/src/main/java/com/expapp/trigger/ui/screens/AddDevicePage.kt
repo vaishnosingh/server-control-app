@@ -245,7 +245,8 @@ fun AddDevicePage(
                                     r2Url = r2Url.trim(),
                                     powerOnUrl = endpoints.powerOn,
                                     powerOffUrl = endpoints.powerOff,
-                                    rebootUrl = endpoints.reboot
+                                    rebootUrl = endpoints.reboot,
+                                    statusUrl = endpoints.status
                                 )
                                 onDeviceAdded(newDevice)
                                 successMessage = "Device \"${newDevice.name}\" added successfully!"

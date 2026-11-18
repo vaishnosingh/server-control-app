@@ -12,7 +12,8 @@ class R2ConfigParserTest {
             {
                 "poweron": "https://cosmos.linuxguy.space/poweron",
                 "poweroff": "https://cosmos.linuxguy.space/poweroff",
-                "reboot": "https://cosmos.linuxguy.space/reboot"
+                "reboot": "https://cosmos.linuxguy.space/reboot",
+                "status": "https://cosmos.linuxguy.space/status"
             }
         """.trimIndent()
 
@@ -22,6 +23,7 @@ class R2ConfigParserTest {
         assertEquals("https://cosmos.linuxguy.space/poweron", endpoints.powerOn)
         assertEquals("https://cosmos.linuxguy.space/poweroff", endpoints.powerOff)
         assertEquals("https://cosmos.linuxguy.space/reboot", endpoints.reboot)
+        assertEquals("https://cosmos.linuxguy.space/status", endpoints.status)
     }
 
     @Test

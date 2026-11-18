@@ -127,4 +127,67 @@ class TriggerClient(
             }
         })
     }
+
+    fun checkStatus(
+        device: DeviceConfig,
+        callback: (NodeStatus) -> Unit
+    ) {
+        val baseStatusUrl = if (device.statusUrl.isNotBlank()) {
+            device.statusUrl
+        } else {
+            "https://cosmos.linuxguy.space/status?node=${device.node}"
+        }
+
+        val targetUrl = if (!baseStatusUrl.contains("node=") && device.node.isNotBlank()) {
+            if (baseStatusUrl.contains("?")) {
+                "$baseStatusUrl&node=${device.node}"
+            } else {
+                "$baseStatusUrl?node=${device.node}"
+            }
+        } else {
+            baseStatusUrl
+        }
+
+        val request = try {
+            Request.Builder().url(targetUrl).get().build()
+        } catch (e: Exception) {
+            callback(NodeStatus(isOnline = false, statusText = "INVALID URL"))
+            return
+        }
+
+        client.newCall(request).enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                callback(NodeStatus(isOnline = false, statusText = "OFFLINE"))
+            }
+
+            override fun onResponse(call: Call, response: Response) {
+                response.use {
+                    if (!it.isSuccessful) {
+                        callback(NodeStatus(isOnline = false, statusText = "OFFLINE"))
+                        return
+                    }
+                    val body = it.body?.string().orEmpty().trim()
+                    if (body.startsWith("{")) {
+                        try {
+                            val json = com.google.gson.JsonParser.parseString(body).asJsonObject
+                            val online = when {
+                                json.has("online") && json.get("online").isJsonPrimitive && json.get("online").asJsonPrimitive.isBoolean ->
+                                    json.get("online").asBoolean
+                                json.has("status") && json.get("status").isJsonPrimitive ->
+                                    json.get("status").asString.equals("online", ignoreCase = true)
+                                else -> false
+                            }
+                            val ip = if (json.has("ip") && json.get("ip").isJsonPrimitive) json.get("ip").asString else null
+                            callback(NodeStatus(isOnline = online, statusText = if (online) "ONLINE" else "OFFLINE", ip = ip))
+                        } catch (e: Exception) {
+                            callback(NodeStatus(isOnline = false, statusText = "ERROR"))
+                        }
+                    } else {
+                        val isOnline = body.equals("ONLINE", ignoreCase = true)
+                        callback(NodeStatus(isOnline = isOnline, statusText = if (isOnline) "ONLINE" else "OFFLINE"))
+                    }
+                }
+            }
+        })
+    }
 }

@@ -133,4 +133,57 @@ class TriggerClientTest {
         val result = fetchResult!!
         assertTrue(result.isSuccess)
     }
+
+    @Test
+    fun checkStatus_withJsonResponse_parsesOnlineAndIp() {
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(200)
+                .setBody("""{"node":"debian","online":true,"status":"online","ip":"100.85.63.44"}""")
+        )
+
+        val localDevice = sampleDevice.copy(
+            statusUrl = server.url("/status").toString()
+        )
+
+        val latch = CountDownLatch(1)
+        var statusResult: NodeStatus? = null
+
+        client.checkStatus(localDevice) { status ->
+            statusResult = status
+            latch.countDown()
+        }
+
+        assertTrue(latch.await(3, TimeUnit.SECONDS))
+        val status = statusResult!!
+        assertTrue(status.isOnline)
+        assertEquals("ONLINE", status.statusText)
+        assertEquals("100.85.63.44", status.ip)
+    }
+
+    @Test
+    fun checkStatus_withPlainText_parsesOnline() {
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(200)
+                .setBody("ONLINE")
+        )
+
+        val localDevice = sampleDevice.copy(
+            statusUrl = server.url("/ping").toString()
+        )
+
+        val latch = CountDownLatch(1)
+        var statusResult: NodeStatus? = null
+
+        client.checkStatus(localDevice) { status ->
+            statusResult = status
+            latch.countDown()
+        }
+
+        assertTrue(latch.await(3, TimeUnit.SECONDS))
+        val status = statusResult!!
+        assertTrue(status.isOnline)
+        assertEquals("ONLINE", status.statusText)
+    }
 }

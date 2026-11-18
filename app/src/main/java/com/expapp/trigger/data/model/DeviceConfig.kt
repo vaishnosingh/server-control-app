@@ -10,5 +10,6 @@ data class DeviceConfig(
     val r2Url: String,
     val powerOnUrl: String,
     val powerOffUrl: String,
-    val rebootUrl: String
+    val rebootUrl: String,
+    val statusUrl: String = ""
 )
