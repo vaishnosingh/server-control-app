@@ -91,6 +91,25 @@ class MainActivity : FragmentActivity() {
         enableEdgeToEdge()
 
         repository = DeviceRepository(SharedPrefsStorage(applicationContext))
+        val settingsPrefs = getSharedPreferences("app_settings_prefs", Context.MODE_PRIVATE)
+        val hasSeeded = settingsPrefs.getBoolean("has_seeded_default_device", false)
+        if (!hasSeeded) {
+            settingsPrefs.edit().putBoolean("has_seeded_default_device", true).apply()
+            if (repository.getDevices().isEmpty()) {
+                val defaultDevice = DeviceConfig(
+                    id = "2dc98ae9-9f71-4f29-95a6-a59ac94d7bf6",
+                    name = "Server",
+                    node = "debian",
+                    powerOffUrl = "https://cosmos.linuxguy.space/poweroff?node=debian",
+                    powerOnUrl = "https://trigger.macrodroid.com/87f2f62c-09ee-43cb-8796-fd1a6465754b/wakeserver",
+                    r2Url = "https://bucket.linuxguy.space/home-server-app/endpoints.json",
+                    rebootUrl = "https://cosmos.linuxguy.space/reboot?node=debian",
+                    secretKey = "Carbon@12",
+                    statusUrl = "https://cosmos.linuxguy.space/status?node=debian"
+                )
+                repository.addDevice(defaultDevice)
+            }
+        }
         triggerClient = TriggerClient()
         appSettings = AppSettings(applicationContext)
         historyRepository = TriggerHistoryRepository(applicationContext)
