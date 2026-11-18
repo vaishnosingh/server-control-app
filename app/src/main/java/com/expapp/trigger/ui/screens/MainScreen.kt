@@ -1,12 +1,14 @@
 package com.expapp.trigger.ui.screens
 
 import android.widget.Toast
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -21,8 +23,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -31,6 +33,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
@@ -41,28 +44,32 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import com.expapp.trigger.data.model.DeviceConfig
 import com.expapp.trigger.data.repository.DeviceRepository
 import com.expapp.trigger.network.NodeStatus
 import com.expapp.trigger.network.TriggerAction
 import com.expapp.trigger.network.TriggerClient
-import com.expapp.trigger.ui.theme.DarkBackground
-import com.expapp.trigger.ui.theme.DarkCardBorder
-import com.expapp.trigger.ui.theme.DarkSurface
-import com.expapp.trigger.ui.theme.DarkSurfaceVariant
-import com.expapp.trigger.ui.theme.PowerOnBorder
-import com.expapp.trigger.ui.theme.PowerOnGreen
-import com.expapp.trigger.ui.theme.StatusOnlineBg
-import com.expapp.trigger.ui.theme.StatusOnlineBorder
-import com.expapp.trigger.ui.theme.StatusOnlineText
+import com.expapp.trigger.ui.theme.BgBase
+import com.expapp.trigger.ui.theme.BgSurface
+import com.expapp.trigger.ui.theme.BorderSubtle
+import com.expapp.trigger.ui.theme.GreenVibrant
+import com.expapp.trigger.ui.theme.OnlineBg
+import com.expapp.trigger.ui.theme.OnlineBorder
+import com.expapp.trigger.ui.theme.OnlineText
+import com.expapp.trigger.ui.theme.TextMuted
 import com.expapp.trigger.ui.theme.TextPrimary
 import com.expapp.trigger.ui.theme.TextSecondary
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
@@ -74,23 +81,33 @@ fun MainScreen(
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
+    val lifecycleOwner = LocalLifecycleOwner.current
 
     var devices by remember { mutableStateOf(repository.getDevices()) }
     val pagerState = rememberPagerState(pageCount = { devices.size + 1 })
 
-    // Device ID -> In-Flight Loading State
-    val loadingStates = remember { mutableStateMapOf<String, Boolean>() }
-    // Device ID -> Pair(StatusMessage, IsSuccess)
-    val statusStates = remember { mutableStateMapOf<String, Pair<String, Boolean>>() }
-    // Device ID -> Live NodeStatus (online / offline / ip)
-    val nodeStatuses = remember { mutableStateMapOf<String, NodeStatus>() }
-    // Device ID -> Is Checking Status
-    val checkingStatusMap = remember { mutableStateMapOf<String, Boolean>() }
+    var isAppInForeground by remember { mutableStateOf(true) }
+    DisposableEffect(lifecycleOwner) {
+        val obs = LifecycleEventObserver { _, event ->
+            isAppInForeground = when (event) {
+                Lifecycle.Event.ON_RESUME -> true
+                else -> false
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(obs)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(obs) }
+    }
 
+    val loadingStates     = remember { mutableStateMapOf<String, Boolean>() }
+    val statusStates      = remember { mutableStateMapOf<String, Pair<String, Boolean>>() }
+    val nodeStatuses      = remember { mutableStateMapOf<String, NodeStatus>() }
+    val checkingStatusMap = remember { mutableStateMapOf<String, Boolean>() }
     var isSyncing by remember { mutableStateOf(false) }
 
-    fun refreshDeviceStatus(device: DeviceConfig) {
-        checkingStatusMap[device.id] = true
+    fun refreshStatus(device: DeviceConfig, showIndicator: Boolean = false) {
+        if (showIndicator || nodeStatuses[device.id] == null) {
+            checkingStatusMap[device.id] = true
+        }
         triggerClient.checkStatus(device) { status ->
             checkingStatusMap[device.id] = false
             nodeStatuses[device.id] = status
@@ -98,262 +115,202 @@ fun MainScreen(
     }
 
     fun syncEndpoints(showToast: Boolean = false) {
-        val currentDevices = repository.getDevices()
-        if (currentDevices.isEmpty()) return
+        val current = repository.getDevices()
+        if (current.isEmpty()) return
         isSyncing = true
-        var updatedCount = 0
-        var completedCount = 0
-        val totalToSync = currentDevices.count { it.r2Url.isNotBlank() }
-
-        if (totalToSync == 0) {
-            isSyncing = false
-            // Still check ping/status for all devices
-            currentDevices.forEach { refreshDeviceStatus(it) }
-            return
-        }
-
-        currentDevices.forEach { device ->
-            // Trigger status check simultaneously
-            refreshDeviceStatus(device)
-
-            if (device.r2Url.isNotBlank()) {
-                triggerClient.fetchR2Config(device.r2Url) { result ->
-                    completedCount++
-                    result.onSuccess { endpoints ->
-                        val changed = repository.updateEndpoints(
-                            deviceId = device.id,
-                            powerOnUrl = endpoints.powerOn,
-                            powerOffUrl = endpoints.powerOff,
-                            rebootUrl = endpoints.reboot,
-                            statusUrl = endpoints.status
-                        )
-                        if (changed) {
-                            updatedCount++
-                            devices = repository.getDevices()
-                        }
-                    }
-
-                    if (completedCount == totalToSync) {
-                        isSyncing = false
-                        if (showToast) {
-                            if (updatedCount > 0) {
-                                Toast.makeText(context, "Updated endpoints for $updatedCount device(s)", Toast.LENGTH_SHORT).show()
-                            } else {
-                                Toast.makeText(context, "All device endpoints are up to date", Toast.LENGTH_SHORT).show()
-                            }
-                        } else if (updatedCount > 0) {
-                            Toast.makeText(context, "Synced: Updated endpoints from Cloudflare R2", Toast.LENGTH_SHORT).show()
-                        }
-                    }
+        var updated = 0; var completed = 0
+        val total = current.count { it.r2Url.isNotBlank() }
+        if (total == 0) { isSyncing = false; return }
+        current.filter { it.r2Url.isNotBlank() }.forEach { device ->
+            triggerClient.fetchR2Config(device.r2Url) { result ->
+                completed++
+                result.onSuccess { ep ->
+                    val changed = repository.updateEndpoints(device.id, ep.powerOn, ep.powerOff, ep.reboot, ep.status)
+                    if (changed) { updated++; devices = repository.getDevices() }
+                }
+                if (completed == total) {
+                    isSyncing = false
+                    if (showToast) Toast.makeText(
+                        context,
+                        if (updated > 0) "Endpoints updated" else "Already up to date",
+                        Toast.LENGTH_SHORT
+                    ).show()
                 }
             }
         }
     }
 
-    // Automatically check Cloudflare R2 and device status on every app launch
-    LaunchedEffect(Unit) {
-        syncEndpoints(showToast = false)
-        devices.forEach { refreshDeviceStatus(it) }
-    }
+    // Initial R2 sync on launch
+    LaunchedEffect(Unit) { syncEndpoints(false) }
 
-    // Auto-refresh status when swiping to a device
-    LaunchedEffect(pagerState.currentPage) {
+    // Active 5-second polling — only while in foreground on a device page
+    LaunchedEffect(pagerState.currentPage, isAppInForeground, devices.size) {
+        if (!isAppInForeground) return@LaunchedEffect
         val page = pagerState.currentPage
-        if (page < devices.size) {
-            refreshDeviceStatus(devices[page])
+        if (page >= devices.size) return@LaunchedEffect
+        val dev = devices[page]
+        while (isActive && isAppInForeground) {
+            refreshStatus(dev, showIndicator = false)
+            delay(5000L)
         }
     }
 
     fun executeAction(device: DeviceConfig, action: TriggerAction) {
-        val actionLabel = when (action) {
-            TriggerAction.POWER_ON -> "Power On"
-            TriggerAction.POWER_OFF -> "Power Off"
-            TriggerAction.REBOOT -> "Reboot"
-        }
-
         loadingStates[device.id] = true
         statusStates.remove(device.id)
-
         triggerClient.sendTrigger(device, action) { response ->
             loadingStates[device.id] = false
-            val statusText = if (response.isSuccess) {
-                "$actionLabel sent: HTTP ${response.statusCode} - ${response.message.take(60)}"
+            val msg = if (response.isSuccess) {
+                when (action) {
+                    TriggerAction.POWER_ON  -> "Power on signal sent"
+                    TriggerAction.POWER_OFF -> "Shutdown signal sent"
+                    TriggerAction.REBOOT    -> "Restart signal sent"
+                }
             } else {
-                "Failed: ${response.message.take(60)}"
+                val raw = response.message.trim()
+                val clean = if (raw.startsWith("<")) "Request failed (HTTP ${response.statusCode})" else raw.take(60)
+                "Failed — $clean"
             }
-            statusStates[device.id] = Pair(statusText, response.isSuccess)
-
-            Toast.makeText(
-                context,
-                if (response.isSuccess) "$actionLabel successful (${response.statusCode})" else "Failed: ${response.message}",
-                Toast.LENGTH_SHORT
-            ).show()
-
-            // Re-check live status after action
+            statusStates[device.id] = msg to response.isSuccess
+            Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
             coroutineScope.launch {
-                delay(2000)
-                refreshDeviceStatus(device)
+                delay(1500); refreshStatus(device, showIndicator = true)
+                delay(4000); refreshStatus(device)
+                delay(5000); refreshStatus(device)
             }
         }
     }
 
+    // Spin animation for sync button
+    val rotationAngle by animateFloatAsState(
+        targetValue = if (isSyncing) 360f else 0f,
+        animationSpec = if (isSyncing) tween(900, easing = FastOutSlowInEasing) else tween(0),
+        label = "sync_rotate"
+    )
+
     Scaffold(
         modifier = modifier.fillMaxSize(),
-        containerColor = DarkBackground,
+        containerColor = BgBase,
         topBar = {
             CenterAlignedTopAppBar(
                 title = {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            modifier = Modifier
-                                .size(34.dp)
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(DarkSurfaceVariant)
-                                .border(1.dp, DarkCardBorder, RoundedCornerShape(10.dp)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Dns,
-                                contentDescription = null,
-                                tint = PowerOnBorder,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
+                        Icon(
+                            Icons.Default.Terminal,
+                            contentDescription = null,
+                            tint = GreenVibrant,
+                            modifier = Modifier.size(18.dp)
+                        )
                         Spacer(modifier = Modifier.width(10.dp))
                         Text(
                             text = "DEVICE TRIGGER",
-                            fontSize = 17.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            letterSpacing = 1.sp,
-                            color = TextPrimary
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 2.sp,
+                            color = TextPrimary,
+                            fontFamily = FontFamily.Monospace
                         )
-
-                        // Online counter badge if devices exist
                         val onlineCount = devices.count { nodeStatuses[it.id]?.isOnline == true }
-                        if (devices.isNotEmpty()) {
+                        if (devices.isNotEmpty() && onlineCount > 0) {
                             Spacer(modifier = Modifier.width(10.dp))
                             Box(
                                 modifier = Modifier
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .background(if (onlineCount > 0) StatusOnlineBg else DarkSurfaceVariant)
-                                    .border(1.dp, if (onlineCount > 0) StatusOnlineBorder else DarkCardBorder, RoundedCornerShape(12.dp))
-                                    .padding(horizontal = 7.dp, vertical = 2.dp)
+                                    .clip(CircleShape)
+                                    .background(OnlineBg)
+                                    .border(1.dp, OnlineBorder, CircleShape)
+                                    .padding(horizontal = 8.dp, vertical = 2.dp)
                             ) {
                                 Text(
-                                    text = "$onlineCount online",
-                                    fontSize = 11.sp,
+                                    "$onlineCount online",
+                                    fontSize = 10.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = if (onlineCount > 0) StatusOnlineText else TextSecondary
+                                    color = OnlineText,
+                                    letterSpacing = 0.5.sp
                                 )
                             }
                         }
                     }
                 },
                 actions = {
-                    // Manual sync check
-                    IconButton(
-                        onClick = { syncEndpoints(showToast = true) },
-                        enabled = !isSyncing
-                    ) {
+                    IconButton(onClick = { syncEndpoints(true) }, enabled = !isSyncing) {
                         Icon(
-                            imageVector = Icons.Default.Refresh,
-                            contentDescription = "Sync Endpoints",
-                            tint = if (isSyncing) TextSecondary.copy(alpha = 0.5f) else PowerOnBorder
+                            Icons.Default.Refresh,
+                            "Sync",
+                            tint = if (isSyncing) TextMuted else GreenVibrant,
+                            modifier = Modifier.rotate(rotationAngle)
                         )
                     }
-
-                    // Quick jump to Add Device tab
                     IconButton(
-                        onClick = {
-                            coroutineScope.launch {
-                                pagerState.animateScrollToPage(devices.size)
-                            }
-                        }
+                        onClick = { coroutineScope.launch { pagerState.animateScrollToPage(devices.size) } }
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Add,
-                            contentDescription = "Add Device",
-                            tint = PowerOnBorder
-                        )
+                        Icon(Icons.Default.Add, "Add Device", tint = GreenVibrant)
                     }
                 },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                    containerColor = DarkSurface
+                    containerColor = BgSurface
                 )
             )
         },
         bottomBar = {
-            // Horizontal Pager Dots Indicator
-            val totalPages = devices.size + 1
-            if (totalPages > 1) {
+            val total = devices.size + 1
+            if (total > 1) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(vertical = 16.dp),
+                        .padding(vertical = 14.dp),
                     horizontalArrangement = Arrangement.Center,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    repeat(totalPages) { pageIndex ->
-                        val isSelected = pagerState.currentPage == pageIndex
-                        val isAddPage = pageIndex == devices.size
-
+                    repeat(total) { i ->
+                        val selected = pagerState.currentPage == i
+                        val isAdd    = i == devices.size
+                        val dotColor = when {
+                            selected && !isAdd -> GreenVibrant
+                            selected           -> TextSecondary
+                            isAdd              -> TextMuted.copy(alpha = 0.4f)
+                            else               -> TextMuted.copy(alpha = 0.3f)
+                        }
                         Box(
                             modifier = Modifier
-                                .padding(horizontal = 4.dp)
-                                .height(8.dp)
-                                .width(if (isSelected) 24.dp else 8.dp)
-                                .clip(if (isSelected) RoundedCornerShape(4.dp) else CircleShape)
-                                .background(
-                                    when {
-                                        isSelected -> PowerOnBorder
-                                        isAddPage -> TextSecondary.copy(alpha = 0.5f)
-                                        else -> TextSecondary.copy(alpha = 0.25f)
-                                    }
-                                )
+                                .padding(horizontal = 3.dp)
+                                .height(6.dp)
+                                .width(if (selected) 22.dp else 6.dp)
+                                .clip(if (selected) RoundedCornerShape(3.dp) else CircleShape)
+                                .background(dotColor)
                         )
                     }
                 }
             }
         }
-    ) { paddingValues ->
+    ) { padding ->
         HorizontalPager(
             state = pagerState,
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
+            modifier = Modifier.fillMaxSize().padding(padding)
         ) { page ->
             if (page < devices.size) {
-                val currentDevice = devices[page]
-                val isLoading = loadingStates[currentDevice.id] == true
-                val statusInfo = statusStates[currentDevice.id]
-
+                val dev = devices[page]
                 DevicePage(
-                    device = currentDevice,
-                    isLoading = isLoading,
-                    nodeStatus = nodeStatuses[currentDevice.id],
-                    isCheckingStatus = checkingStatusMap[currentDevice.id] == true,
-                    lastStatus = statusInfo?.first,
-                    lastSuccess = statusInfo?.second,
-                    onDismissStatus = { statusStates.remove(currentDevice.id) },
-                    onRefreshStatus = { refreshDeviceStatus(currentDevice) },
-                    onTrigger = { action -> executeAction(currentDevice, action) },
-                    onDelete = { dev ->
-                        repository.deleteDevice(dev.id)
-                        devices = repository.getDevices()
-                    }
+                    device = dev,
+                    isLoading = loadingStates[dev.id] == true,
+                    nodeStatus = nodeStatuses[dev.id],
+                    isCheckingStatus = checkingStatusMap[dev.id] == true,
+                    lastStatus = statusStates[dev.id]?.first,
+                    lastSuccess = statusStates[dev.id]?.second,
+                    onDismissStatus = { statusStates.remove(dev.id) },
+                    onRefreshStatus = { refreshStatus(dev, showIndicator = true) },
+                    onTrigger = { action -> executeAction(dev, action) },
+                    onDelete = { d -> repository.deleteDevice(d.id); devices = repository.getDevices() }
                 )
             } else {
                 AddDevicePage(
                     triggerClient = triggerClient,
-                    onDeviceAdded = { newDevice ->
-                        repository.addDevice(newDevice)
+                    onDeviceAdded = { newDev ->
+                        repository.addDevice(newDev)
                         devices = repository.getDevices()
-                        refreshDeviceStatus(newDevice)
+                        refreshStatus(newDev, showIndicator = true)
                         coroutineScope.launch {
-                            val newPageIndex = devices.indexOfFirst { it.id == newDevice.id }
-                            if (newPageIndex >= 0) {
-                                pagerState.animateScrollToPage(newPageIndex)
-                            }
+                            val idx = devices.indexOfFirst { it.id == newDev.id }
+                            if (idx >= 0) pagerState.animateScrollToPage(idx)
                         }
                     }
                 )

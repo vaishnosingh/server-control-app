@@ -22,6 +22,22 @@ class TriggerClient(
 ) {
     private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
 
+    private val mainHandler = try {
+        val looper = android.os.Looper.getMainLooper()
+        if (looper != null) android.os.Handler(looper) else null
+    } catch (e: Throwable) {
+        null
+    }
+
+    private fun runOnMain(block: () -> Unit) {
+        val handler = mainHandler
+        if (handler != null) {
+            handler.post(block)
+        } else {
+            block()
+        }
+    }
+
     fun buildRequest(device: DeviceConfig, action: TriggerAction): Request {
         return when (action) {
             TriggerAction.POWER_ON -> {
@@ -61,38 +77,44 @@ class TriggerClient(
         val request = try {
             buildRequest(device, action)
         } catch (e: Exception) {
-            callback(
-                TriggerResponse(
-                    isSuccess = false,
-                    statusCode = -1,
-                    message = "Invalid URL or configuration: ${e.message}"
+            runOnMain {
+                callback(
+                    TriggerResponse(
+                        isSuccess = false,
+                        statusCode = -1,
+                        message = "Invalid URL or configuration: ${e.message}"
+                    )
                 )
-            )
+            }
             return
         }
 
         client.newCall(request).enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {
-                callback(
-                    TriggerResponse(
-                        isSuccess = false,
-                        statusCode = -1,
-                        message = e.localizedMessage ?: "Network connection failed"
+                runOnMain {
+                    callback(
+                        TriggerResponse(
+                            isSuccess = false,
+                            statusCode = -1,
+                            message = e.localizedMessage ?: "Network connection failed"
+                        )
                     )
-                )
+                }
             }
 
             override fun onResponse(call: Call, response: Response) {
                 response.use {
                     val code = it.code
                     val bodyText = it.body?.string().orEmpty()
-                    callback(
-                        TriggerResponse(
-                            isSuccess = it.isSuccessful,
-                            statusCode = code,
-                            message = if (bodyText.isNotEmpty()) bodyText else "HTTP $code"
+                    runOnMain {
+                        callback(
+                            TriggerResponse(
+                                isSuccess = it.isSuccessful,
+                                statusCode = code,
+                                message = if (bodyText.isNotEmpty()) bodyText else "HTTP $code"
+                            )
                         )
-                    )
+                    }
                 }
             }
         })
@@ -105,24 +127,26 @@ class TriggerClient(
         val request = try {
             Request.Builder().url(url).get().build()
         } catch (e: Exception) {
-            callback(Result.failure(e))
+            runOnMain { callback(Result.failure(e)) }
             return
         }
 
         client.newCall(request).enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {
-                callback(Result.failure(e))
+                runOnMain { callback(Result.failure(e)) }
             }
 
             override fun onResponse(call: Call, response: Response) {
                 response.use {
                     if (!it.isSuccessful) {
-                        callback(Result.failure(IOException("Failed to fetch R2 JSON: HTTP ${it.code}")))
+                        runOnMain {
+                            callback(Result.failure(IOException("Failed to fetch R2 JSON: HTTP ${it.code}")))
+                        }
                         return
                     }
                     val jsonString = it.body?.string().orEmpty()
                     val parseResult = R2ConfigParser.parse(jsonString)
-                    callback(parseResult)
+                    runOnMain { callback(parseResult) }
                 }
             }
         })
@@ -132,40 +156,34 @@ class TriggerClient(
         device: DeviceConfig,
         callback: (NodeStatus) -> Unit
     ) {
-        val baseStatusUrl = if (device.statusUrl.isNotBlank()) {
-            device.statusUrl
-        } else {
-            "https://cosmos.linuxguy.space/status?node=${device.node}"
-        }
+        // Only use statusUrl from JSON config — no hardcoded fallback
+        val baseStatusUrl = device.statusUrl.trim()
 
-        val targetUrl = if (!baseStatusUrl.contains("node=") && device.node.isNotBlank()) {
-            if (baseStatusUrl.contains("?")) {
-                "$baseStatusUrl&node=${device.node}"
-            } else {
-                "$baseStatusUrl?node=${device.node}"
+        if (baseStatusUrl.isBlank()) {
+            runOnMain {
+                callback(NodeStatus(isOnline = false, statusText = "NO STATUS URL"))
             }
-        } else {
-            baseStatusUrl
+            return
         }
 
         val request = try {
-            Request.Builder().url(targetUrl).get().build()
+            Request.Builder().url(baseStatusUrl).get().build()
         } catch (e: Exception) {
-            callback(NodeStatus(isOnline = false, statusText = "INVALID URL"))
+            runOnMain {
+                callback(NodeStatus(isOnline = false, statusText = "INVALID URL"))
+            }
             return
         }
 
         client.newCall(request).enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {
-                callback(NodeStatus(isOnline = false, statusText = "OFFLINE"))
+                runOnMain {
+                    callback(NodeStatus(isOnline = false, statusText = "OFFLINE"))
+                }
             }
 
             override fun onResponse(call: Call, response: Response) {
                 response.use {
-                    if (!it.isSuccessful) {
-                        callback(NodeStatus(isOnline = false, statusText = "OFFLINE"))
-                        return
-                    }
                     val body = it.body?.string().orEmpty().trim()
                     if (body.startsWith("{")) {
                         try {
@@ -177,14 +195,49 @@ class TriggerClient(
                                     json.get("status").asString.equals("online", ignoreCase = true)
                                 else -> false
                             }
-                            val ip = if (json.has("ip") && json.get("ip").isJsonPrimitive) json.get("ip").asString else null
-                            callback(NodeStatus(isOnline = online, statusText = if (online) "ONLINE" else "OFFLINE", ip = ip))
+                            val ip = if (json.has("ip") && !json.get("ip").isJsonNull) json.get("ip").asString else null
+                            val uptime = when {
+                                json.has("uptime") && !json.get("uptime").isJsonNull -> json.get("uptime").asString
+                                json.has("on_since_duration") && !json.get("on_since_duration").isJsonNull -> json.get("on_since_duration").asString
+                                else -> null
+                            }
+                            val onSinceIst = if (json.has("on_since_ist") && !json.get("on_since_ist").isJsonNull) {
+                                json.get("on_since_ist").asString
+                            } else null
+                            val lastActiveAgo = if (json.has("last_active_ago") && !json.get("last_active_ago").isJsonNull) {
+                                json.get("last_active_ago").asString
+                            } else null
+                            val lastActiveIst = if (json.has("last_active_ist") && !json.get("last_active_ist").isJsonNull) {
+                                json.get("last_active_ist").asString
+                            } else null
+
+                            runOnMain {
+                                callback(
+                                    NodeStatus(
+                                        isOnline = online,
+                                        statusText = if (online) "ONLINE" else "OFFLINE",
+                                        ip = ip,
+                                        uptime = uptime,
+                                        onSinceIst = onSinceIst,
+                                        lastActiveAgo = lastActiveAgo,
+                                        lastActiveIst = lastActiveIst
+                                    )
+                                )
+                            }
                         } catch (e: Exception) {
-                            callback(NodeStatus(isOnline = false, statusText = "ERROR"))
+                            runOnMain {
+                                callback(NodeStatus(isOnline = false, statusText = "ERROR"))
+                            }
+                        }
+                    } else if (it.isSuccessful) {
+                        val isOnline = body.equals("ONLINE", ignoreCase = true)
+                        runOnMain {
+                            callback(NodeStatus(isOnline = isOnline, statusText = if (isOnline) "ONLINE" else "OFFLINE"))
                         }
                     } else {
-                        val isOnline = body.equals("ONLINE", ignoreCase = true)
-                        callback(NodeStatus(isOnline = isOnline, statusText = if (isOnline) "ONLINE" else "OFFLINE"))
+                        runOnMain {
+                            callback(NodeStatus(isOnline = false, statusText = "OFFLINE"))
+                        }
                     }
                 }
             }

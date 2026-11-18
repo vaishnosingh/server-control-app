@@ -139,7 +139,20 @@ class TriggerClientTest {
         server.enqueue(
             MockResponse()
                 .setResponseCode(200)
-                .setBody("""{"node":"debian","online":true,"status":"online","ip":"100.85.63.44"}""")
+                .setBody(
+                    """
+                    {
+                      "node": "debian",
+                      "online": true,
+                      "status": "online",
+                      "ip": "100.85.63.44",
+                      "on_since_duration": "57m 14s",
+                      "on_since_ist": "2026-11-18 02:42:33 PM IST",
+                      "uptime": "57m 14s",
+                      "uptime_seconds": 3434
+                    }
+                    """.trimIndent()
+                )
         )
 
         val localDevice = sampleDevice.copy(
@@ -159,6 +172,50 @@ class TriggerClientTest {
         assertTrue(status.isOnline)
         assertEquals("ONLINE", status.statusText)
         assertEquals("100.85.63.44", status.ip)
+        assertEquals("57m 14s", status.uptime)
+        assertEquals("2026-11-18 02:42:33 PM IST", status.onSinceIst)
+    }
+
+    @Test
+    fun checkStatus_withOfflineHttp503Json_parsesOfflineAndLastActive() {
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(503)
+                .setBody(
+                    """
+                    {
+                      "node": "debian",
+                      "online": false,
+                      "status": "offline",
+                      "ip": "100.85.63.44",
+                      "last_active_ist": "2026-11-18 03:36:58 PM IST",
+                      "last_active_time": "2026-11-18 15:36:58 IST",
+                      "last_active_ago": "4m 12s ago",
+                      "last_active_timestamp": 1794996418
+                    }
+                    """.trimIndent()
+                )
+        )
+
+        val localDevice = sampleDevice.copy(
+            statusUrl = server.url("/status").toString()
+        )
+
+        val latch = CountDownLatch(1)
+        var statusResult: NodeStatus? = null
+
+        client.checkStatus(localDevice) { status ->
+            statusResult = status
+            latch.countDown()
+        }
+
+        assertTrue(latch.await(3, TimeUnit.SECONDS))
+        val status = statusResult!!
+        assertEquals(false, status.isOnline)
+        assertEquals("OFFLINE", status.statusText)
+        assertEquals("100.85.63.44", status.ip)
+        assertEquals("4m 12s ago", status.lastActiveAgo)
+        assertEquals("2026-11-18 03:36:58 PM IST", status.lastActiveIst)
     }
 
     @Test

@@ -16,5 +16,9 @@ data class NodeStatus(
     val isOnline: Boolean,
     val statusText: String,
     val ip: String? = null,
+    val uptime: String? = null,
+    val onSinceIst: String? = null,
+    val lastActiveAgo: String? = null,
+    val lastActiveIst: String? = null,
     val timestamp: Long = System.currentTimeMillis()
 )
