@@ -24,6 +24,9 @@ import java.util.concurrent.TimeUnit
 class UpdateManager(
     private val context: Context,
     private val okHttpClient: OkHttpClient = OkHttpClient.Builder()
+        .followRedirects(true)
+        .followSslRedirects(true)
+        .retryOnConnectionFailure(true)
         .connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(60, TimeUnit.SECONDS)
         .build(),
@@ -103,6 +106,7 @@ class UpdateManager(
 
                             val assets = json.getAsJsonArray("assets")
                             var apkUrl: String? = null
+                            var apkApiUrl: String? = null
                             var apkName = "app-release.apk"
                             var apkSize = 0L
 
@@ -112,6 +116,7 @@ class UpdateManager(
                                     val name = assetObj.get("name")?.asString.orEmpty()
                                     if (name.endsWith(".apk", ignoreCase = true)) {
                                         apkUrl = assetObj.get("browser_download_url")?.asString
+                                        apkApiUrl = assetObj.get("url")?.asString
                                         apkName = name
                                         apkSize = assetObj.get("size")?.asLong ?: 0L
                                         break
@@ -126,6 +131,7 @@ class UpdateManager(
                                     title = title,
                                     changelog = changelog,
                                     downloadUrl = apkUrl,
+                                    assetApiUrl = apkApiUrl,
                                     apkFileName = apkName,
                                     sizeBytes = apkSize
                                 )
@@ -162,21 +168,39 @@ class UpdateManager(
 
     /**
      * Downloads the APK file to the app's cache directory and streams progress updates.
+     * If the browser download URL fails or returns 404, automatically attempts fallback to the API asset URL.
      */
     fun downloadApk(
         downloadUrl: String,
+        assetApiUrl: String? = null,
         onProgress: (DownloadState) -> Unit
     ): Call {
-        val request = Request.Builder()
-            .url(downloadUrl)
-            .addHeader("User-Agent", "ServerControlApp")
-            .get()
-            .build()
+        return startDownloadCall(downloadUrl, assetApiUrl, isFallback = false, onProgress)
+    }
 
+    private fun startDownloadCall(
+        url: String,
+        fallbackUrl: String?,
+        isFallback: Boolean,
+        onProgress: (DownloadState) -> Unit
+    ): Call {
+        val requestBuilder = Request.Builder()
+            .url(url)
+            .addHeader("User-Agent", "ServerControlApp")
+
+        if (isFallback) {
+            requestBuilder.addHeader("Accept", "application/octet-stream")
+        }
+
+        val request = requestBuilder.get().build()
         val call = okHttpClient.newCall(request)
+
         call.enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {
-                if (!call.isCanceled()) {
+                if (call.isCanceled()) return
+                if (!isFallback && !fallbackUrl.isNullOrBlank()) {
+                    startDownloadCall(fallbackUrl, null, isFallback = true, onProgress)
+                } else {
                     runOnMain {
                         onProgress(DownloadState.Failed("Download failed: ${e.localizedMessage}"))
                     }
@@ -184,15 +208,24 @@ class UpdateManager(
             }
 
             override fun onResponse(call: Call, response: Response) {
+                if (call.isCanceled()) return
+
                 if (!response.isSuccessful) {
-                    runOnMain {
-                        onProgress(DownloadState.Failed("Server returned HTTP ${response.code}"))
+                    response.close()
+                    if (!isFallback && !fallbackUrl.isNullOrBlank()) {
+                        // Fallback to direct asset API
+                        startDownloadCall(fallbackUrl, null, isFallback = true, onProgress)
+                    } else {
+                        runOnMain {
+                            onProgress(DownloadState.Failed("Server returned HTTP ${response.code}"))
+                        }
                     }
                     return
                 }
 
                 val responseBody = response.body
                 if (responseBody == null) {
+                    response.close()
                     runOnMain {
                         onProgress(DownloadState.Failed("Response body was empty"))
                     }
@@ -245,8 +278,14 @@ class UpdateManager(
                         }
                     }
 
-                    runOnMain {
-                        onProgress(DownloadState.ReadyToInstall(apkFile))
+                    if (apkFile.exists() && apkFile.length() > 0) {
+                        runOnMain {
+                            onProgress(DownloadState.ReadyToInstall(apkFile))
+                        }
+                    } else {
+                        runOnMain {
+                            onProgress(DownloadState.Failed("Downloaded file was empty"))
+                        }
                     }
                 } catch (e: Exception) {
                     if (!call.isCanceled()) {
@@ -254,6 +293,8 @@ class UpdateManager(
                             onProgress(DownloadState.Failed("File write failed: ${e.localizedMessage}"))
                         }
                     }
+                } finally {
+                    response.close()
                 }
             }
         })

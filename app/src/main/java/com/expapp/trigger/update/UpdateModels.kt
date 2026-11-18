@@ -8,8 +8,9 @@ data class ReleaseInfo(
     val title: String,
     val changelog: String,
     val downloadUrl: String,
-    val apkFileName: String,
-    val sizeBytes: Long
+    val assetApiUrl: String? = null,
+    val apkFileName: String = "app-release.apk",
+    val sizeBytes: Long = 0L
 )
 
 sealed class UpdateCheckResult {

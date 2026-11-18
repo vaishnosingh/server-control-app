@@ -648,9 +648,28 @@ fun MainScreen(
             currentVersion = BuildConfig.VERSION_NAME,
             downloadState = downloadState,
             onDownload = {
-                downloadState = DownloadState.Downloading(0, 0, availableUpdate!!.sizeBytes)
-                updateManager.downloadApk(availableUpdate!!.downloadUrl) { state ->
-                    downloadState = state
+                val info = availableUpdate!!
+                // If retrying from failure, re-check to get fresh release asset URLs
+                if (downloadState is DownloadState.Failed) {
+                    downloadState = DownloadState.Downloading(0, 0, 0)
+                    updateManager.checkForUpdate(BuildConfig.VERSION_NAME) { checkResult ->
+                        if (checkResult is UpdateCheckResult.UpdateAvailable) {
+                            availableUpdate = checkResult.info
+                            val fresh = checkResult.info
+                            updateManager.downloadApk(fresh.downloadUrl, fresh.assetApiUrl) { state ->
+                                downloadState = state
+                            }
+                        } else {
+                            updateManager.downloadApk(info.downloadUrl, info.assetApiUrl) { state ->
+                                downloadState = state
+                            }
+                        }
+                    }
+                } else {
+                    downloadState = DownloadState.Downloading(0, 0, info.sizeBytes)
+                    updateManager.downloadApk(info.downloadUrl, info.assetApiUrl) { state ->
+                        downloadState = state
+                    }
                 }
             },
             onInstall = { file ->
