@@ -173,20 +173,34 @@ class UpdateManager(
     fun downloadApk(
         downloadUrl: String,
         assetApiUrl: String? = null,
+        expectedSizeBytes: Long = 0L,
         onProgress: (DownloadState) -> Unit
     ): Call {
-        return startDownloadCall(downloadUrl, assetApiUrl, isFallback = false, onProgress)
+        return startDownloadCall(downloadUrl, assetApiUrl, expectedSizeBytes, isFallback = false, onProgress)
     }
 
     private fun startDownloadCall(
         url: String,
         fallbackUrl: String?,
+        expectedSizeBytes: Long,
         isFallback: Boolean,
         onProgress: (DownloadState) -> Unit
     ): Call {
+        // Instantly notify UI that connection/download is initializing so user gets immediate visual feedback
+        runOnMain {
+            onProgress(
+                DownloadState.Downloading(
+                    progressPercent = 0,
+                    bytesDownloaded = 0L,
+                    totalBytes = expectedSizeBytes
+                )
+            )
+        }
+
         val requestBuilder = Request.Builder()
             .url(url)
             .addHeader("User-Agent", "ServerControlApp")
+            .addHeader("Accept-Encoding", "identity") // Disables gzip recompression to stream raw binary immediately with exact Content-Length
 
         if (isFallback) {
             requestBuilder.addHeader("Accept", "application/octet-stream")
@@ -199,7 +213,7 @@ class UpdateManager(
             override fun onFailure(call: Call, e: IOException) {
                 if (call.isCanceled()) return
                 if (!isFallback && !fallbackUrl.isNullOrBlank()) {
-                    startDownloadCall(fallbackUrl, null, isFallback = true, onProgress)
+                    startDownloadCall(fallbackUrl, null, expectedSizeBytes, isFallback = true, onProgress)
                 } else {
                     runOnMain {
                         onProgress(DownloadState.Failed("Download failed: ${e.localizedMessage}"))
@@ -214,7 +228,7 @@ class UpdateManager(
                     response.close()
                     if (!isFallback && !fallbackUrl.isNullOrBlank()) {
                         // Fallback to direct asset API
-                        startDownloadCall(fallbackUrl, null, isFallback = true, onProgress)
+                        startDownloadCall(fallbackUrl, null, expectedSizeBytes, isFallback = true, onProgress)
                     } else {
                         runOnMain {
                             onProgress(DownloadState.Failed("Server returned HTTP ${response.code}"))
@@ -242,14 +256,16 @@ class UpdateManager(
                 }
 
                 try {
-                    val totalBytes = responseBody.contentLength()
+                    val rawLength = responseBody.contentLength()
+                    val totalBytes = if (rawLength > 0L) rawLength else expectedSizeBytes
                     var bytesDownloaded = 0L
 
-                    responseBody.byteStream().use { input ->
-                        FileOutputStream(apkFile).use { output ->
-                            val buffer = ByteArray(8192)
+                    responseBody.byteStream().buffered(65536).use { input ->
+                        FileOutputStream(apkFile).buffered(65536).use { output ->
+                            val buffer = ByteArray(65536)
                             var read: Int
                             var lastPercent = -1
+                            var lastUpdateTime = 0L
 
                             while (input.read(buffer).also { read = it } != -1) {
                                 if (call.isCanceled()) return
@@ -257,12 +273,14 @@ class UpdateManager(
                                 output.write(buffer, 0, read)
                                 bytesDownloaded += read
 
-                                val percent = if (totalBytes > 0) {
-                                    ((bytesDownloaded * 100) / totalBytes).toInt()
+                                val percent = if (totalBytes > 0L) {
+                                    ((bytesDownloaded * 100) / totalBytes).toInt().coerceIn(0, 100)
                                 } else 0
 
-                                if (percent != lastPercent) {
+                                val now = System.currentTimeMillis()
+                                if (percent != lastPercent || (now - lastUpdateTime >= 100)) {
                                     lastPercent = percent
+                                    lastUpdateTime = now
                                     runOnMain {
                                         onProgress(
                                             DownloadState.Downloading(

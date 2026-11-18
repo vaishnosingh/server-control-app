@@ -208,7 +208,7 @@ fun UpdateDialog(
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
                                 Text(
-                                    text = "Downloading update…",
+                                    text = if (downloadState.bytesDownloaded == 0L) "Connecting to server…" else "Downloading update…",
                                     fontSize = 12.sp,
                                     color = TextSecondary
                                 )
@@ -220,21 +220,40 @@ fun UpdateDialog(
                                 )
                             }
                             Spacer(modifier = Modifier.height(8.dp))
-                            LinearProgressIndicator(
-                                progress = { downloadState.progressPercent / 100f },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(8.dp)
-                                    .clip(RoundedCornerShape(4.dp)),
-                                color = GreenVibrant,
-                                trackColor = GreenVibrant.copy(alpha = 0.15f)
-                            )
+                            if (downloadState.bytesDownloaded == 0L && downloadState.progressPercent == 0) {
+                                LinearProgressIndicator(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(8.dp)
+                                        .clip(RoundedCornerShape(4.dp)),
+                                    color = GreenVibrant,
+                                    trackColor = GreenVibrant.copy(alpha = 0.15f)
+                                )
+                            } else {
+                                LinearProgressIndicator(
+                                    progress = { (downloadState.progressPercent / 100f).coerceIn(0f, 1f) },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(8.dp)
+                                        .clip(RoundedCornerShape(4.dp)),
+                                    color = GreenVibrant,
+                                    trackColor = GreenVibrant.copy(alpha = 0.15f)
+                                )
+                            }
                             if (downloadState.totalBytes > 0) {
                                 Spacer(modifier = Modifier.height(6.dp))
                                 val downloadedMb = String.format("%.1f", downloadState.bytesDownloaded / (1024.0 * 1024.0))
                                 val totalMb = String.format("%.1f MB", downloadState.totalBytes / (1024.0 * 1024.0))
                                 Text(
                                     text = "$downloadedMb / $totalMb",
+                                    fontSize = 11.sp,
+                                    color = TextMuted
+                                )
+                            } else if (downloadState.bytesDownloaded > 0) {
+                                Spacer(modifier = Modifier.height(6.dp))
+                                val downloadedMb = String.format("%.1f MB", downloadState.bytesDownloaded / (1024.0 * 1024.0))
+                                Text(
+                                    text = "$downloadedMb downloaded",
                                     fontSize = 11.sp,
                                     color = TextMuted
                                 )

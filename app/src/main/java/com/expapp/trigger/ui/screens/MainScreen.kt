@@ -199,25 +199,27 @@ fun MainScreen(
         }
     }
 
-    fun checkAppUpdate(showToast: Boolean = false) {
+    fun checkAppUpdate(isManual: Boolean = false) {
         isCheckingUpdate = true
         updateManager.checkForUpdate(BuildConfig.VERSION_NAME) { result ->
             isCheckingUpdate = false
             when (result) {
                 is UpdateCheckResult.UpdateAvailable -> {
                     availableUpdate = result.info
-                    if (showToast || dismissedVersion != result.info.versionName) {
-                        showUpdateDialog = true
+                    showUpdateDialog = true
+                    if (isManual) {
+                        Toast.makeText(context, "New update available: v${result.info.versionName}!", Toast.LENGTH_SHORT).show()
                     }
                 }
                 is UpdateCheckResult.UpToDate -> {
-                    if (showToast) {
-                        Toast.makeText(context, "App is up to date (v${BuildConfig.VERSION_NAME})", Toast.LENGTH_SHORT).show()
+                    availableUpdate = null
+                    if (isManual) {
+                        Toast.makeText(context, "Page refreshed • App is up to date (v${BuildConfig.VERSION_NAME})", Toast.LENGTH_SHORT).show()
                     }
                 }
                 is UpdateCheckResult.Error -> {
-                    if (showToast) {
-                        Toast.makeText(context, "Update check failed: ${result.message}", Toast.LENGTH_SHORT).show()
+                    if (isManual) {
+                        Toast.makeText(context, "Page refreshed • Update check failed", Toast.LENGTH_SHORT).show()
                     }
                 }
             }
@@ -227,6 +229,7 @@ fun MainScreen(
     // Pull-to-refresh entire page handler
     fun refreshWholePage() {
         isPullRefreshing = true
+        dismissedVersion = null
         coroutineScope.launch {
             // 1. Sync R2 endpoints
             syncEndpoints(showToast = false)
@@ -236,15 +239,14 @@ fun MainScreen(
                 refreshStatus(dev, showIndicator = true)
             }
 
-            // 3. Check for app updates
-            checkAppUpdate(showToast = false)
+            // 3. Explicitly check for app updates with user feedback
+            checkAppUpdate(isManual = true)
 
             // 4. Update home screen widgets
             ServerWidgetProvider.updateAllWidgets(context)
 
             delay(750)
             isPullRefreshing = false
-            Toast.makeText(context, "Page refreshed", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -651,23 +653,23 @@ fun MainScreen(
                 val info = availableUpdate!!
                 // If retrying from failure, re-check to get fresh release asset URLs
                 if (downloadState is DownloadState.Failed) {
-                    downloadState = DownloadState.Downloading(0, 0, 0)
+                    downloadState = DownloadState.Downloading(0, 0, info.sizeBytes)
                     updateManager.checkForUpdate(BuildConfig.VERSION_NAME) { checkResult ->
                         if (checkResult is UpdateCheckResult.UpdateAvailable) {
                             availableUpdate = checkResult.info
                             val fresh = checkResult.info
-                            updateManager.downloadApk(fresh.downloadUrl, fresh.assetApiUrl) { state ->
+                            updateManager.downloadApk(fresh.downloadUrl, fresh.assetApiUrl, fresh.sizeBytes) { state ->
                                 downloadState = state
                             }
                         } else {
-                            updateManager.downloadApk(info.downloadUrl, info.assetApiUrl) { state ->
+                            updateManager.downloadApk(info.downloadUrl, info.assetApiUrl, info.sizeBytes) { state ->
                                 downloadState = state
                             }
                         }
                     }
                 } else {
                     downloadState = DownloadState.Downloading(0, 0, info.sizeBytes)
-                    updateManager.downloadApk(info.downloadUrl, info.assetApiUrl) { state ->
+                    updateManager.downloadApk(info.downloadUrl, info.assetApiUrl, info.sizeBytes) { state ->
                         downloadState = state
                     }
                 }
