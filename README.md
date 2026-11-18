@@ -31,10 +31,13 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 - **Massive Tactile Buttons**: High-contrast, large touch targets designed to prevent accidental mis-taps while remaining effortless to press.
 - **Horizontal Swipe Navigation**: Seamlessly swipe left and right between configured machines with an animated bottom page indicator.
 - **Dynamic Cloudflare R2 Configuration**: Simply supply your Cloudflare R2 JSON URL when adding a device; the app fetches and validates endpoint URLs automatically.
+- **One-Tap R2 Config Re-fetch**: If you modify endpoint URLs in your Cloudflare R2 JSON, simply tap the **Re-fetch R2 JSON** button (or top-bar Sync) to update all URLs instantly without losing your device secretKey or configuration.
+- **Device Configuration Editor**: Easily edit device names, node identifiers, secret keys, or R2 URLs anytime via the built-in edit dialog.
+- **In-App Self-Updating (OTA)**: Automatically checks GitHub Releases on launch. When a newer version is pushed to GitHub, an in-app dialog displays the changelog with a one-tap "Update Now" installer that updates the APK in-place without wiping any saved data or credentials.
 - **Multi-Device Support**: Manage any number of remote machines. The last swipe tab is always an **"+ Add Device"** configuration screen.
-- **Persistent Local Storage**: Configured machines are safely saved to Android persistent storage (`SharedPreferences`) so they remain available whenever the app is reopened.
-- **Mistake-Proof Safety Prompts**: Reboot and Power Off actions trigger a quick confirmation dialog before sending the request.
-- **Instant Visual Feedback**: On-screen status banners, in-button loading indicators, and Android Toast notifications display HTTP status codes (e.g., `200 OK`) and server responses.
+- **Persistent Local Storage**: Configured machines are safely saved to Android persistent storage (`SharedPreferences`) so they remain available whenever the app is reopened and preserved across app updates.
+- **Mistake-Proof Safety Prompts**: Reboot, Power Off, and Power On actions trigger a quick confirmation dialog before sending the request.
+- **Instant Visual Feedback**: On-screen status banners, in-button loading indicators, live uptime/last-seen telemetry, and Android Toast notifications display HTTP status codes (e.g., `200 OK`) and server responses.
 
 ---
 

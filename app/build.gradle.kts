@@ -20,13 +20,32 @@ android {
         }
     }
 
+    signingConfigs {
+        create("release") {
+            val keystoreFile = file("release.keystore")
+            if (keystoreFile.exists()) {
+                storeFile = keystoreFile
+                storePassword = System.getenv("KEYSTORE_PASSWORD") ?: "servercontrol123"
+                keyAlias = System.getenv("KEY_ALIAS") ?: "servercontrol"
+                keyPassword = System.getenv("KEY_PASSWORD") ?: "servercontrol123"
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("release")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+        }
+        debug {
+            val relConfig = signingConfigs.findByName("release")
+            if (relConfig?.storeFile?.exists() == true) {
+                signingConfig = relConfig
+            }
         }
     }
     compileOptions {
@@ -38,6 +57,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
     composeOptions {
         kotlinCompilerExtensionVersion = "1.5.8"

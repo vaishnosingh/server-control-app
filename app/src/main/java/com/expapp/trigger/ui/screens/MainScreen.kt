@@ -7,6 +7,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -24,6 +25,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -53,12 +55,15 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import com.expapp.trigger.BuildConfig
 import com.expapp.trigger.data.model.DeviceConfig
 import com.expapp.trigger.data.repository.DeviceRepository
 import com.expapp.trigger.network.NodeStatus
 import com.expapp.trigger.network.TriggerAction
 import com.expapp.trigger.network.TriggerClient
+import com.expapp.trigger.ui.components.UpdateDialog
 import com.expapp.trigger.ui.theme.BgBase
+import com.expapp.trigger.ui.theme.BgElevated
 import com.expapp.trigger.ui.theme.BgSurface
 import com.expapp.trigger.ui.theme.BorderSubtle
 import com.expapp.trigger.ui.theme.GreenVibrant
@@ -68,6 +73,10 @@ import com.expapp.trigger.ui.theme.OnlineText
 import com.expapp.trigger.ui.theme.TextMuted
 import com.expapp.trigger.ui.theme.TextPrimary
 import com.expapp.trigger.ui.theme.TextSecondary
+import com.expapp.trigger.update.DownloadState
+import com.expapp.trigger.update.ReleaseInfo
+import com.expapp.trigger.update.UpdateCheckResult
+import com.expapp.trigger.update.UpdateManager
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -98,6 +107,35 @@ fun MainScreen(
         onDispose { lifecycleOwner.lifecycle.removeObserver(obs) }
     }
 
+    val updateManager = remember { UpdateManager(context) }
+    var availableUpdate by remember { mutableStateOf<ReleaseInfo?>(null) }
+    var showUpdateDialog by remember { mutableStateOf(false) }
+    var downloadState by remember { mutableStateOf<DownloadState>(DownloadState.Idle) }
+    var isCheckingUpdate by remember { mutableStateOf(false) }
+
+    fun checkAppUpdate(showToast: Boolean = false) {
+        isCheckingUpdate = true
+        updateManager.checkForUpdate(BuildConfig.VERSION_NAME) { result ->
+            isCheckingUpdate = false
+            when (result) {
+                is UpdateCheckResult.UpdateAvailable -> {
+                    availableUpdate = result.info
+                    showUpdateDialog = true
+                }
+                is UpdateCheckResult.UpToDate -> {
+                    if (showToast) {
+                        Toast.makeText(context, "App is up to date (v${BuildConfig.VERSION_NAME})", Toast.LENGTH_SHORT).show()
+                    }
+                }
+                is UpdateCheckResult.Error -> {
+                    if (showToast) {
+                        Toast.makeText(context, "Update check failed: ${result.message}", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+        }
+    }
+
     val loadingStates     = remember { mutableStateMapOf<String, Boolean>() }
     val statusStates      = remember { mutableStateMapOf<String, Pair<String, Boolean>>() }
     val nodeStatuses      = remember { mutableStateMapOf<String, NodeStatus>() }
@@ -116,11 +154,18 @@ fun MainScreen(
 
     fun syncEndpoints(showToast: Boolean = false) {
         val current = repository.getDevices()
-        if (current.isEmpty()) return
+        if (current.isEmpty()) {
+            checkAppUpdate(showToast)
+            return
+        }
         isSyncing = true
         var updated = 0; var completed = 0
         val total = current.count { it.r2Url.isNotBlank() }
-        if (total == 0) { isSyncing = false; return }
+        if (total == 0) {
+            isSyncing = false
+            checkAppUpdate(showToast)
+            return
+        }
         current.filter { it.r2Url.isNotBlank() }.forEach { device ->
             triggerClient.fetchR2Config(device.r2Url) { result ->
                 completed++
@@ -135,13 +180,17 @@ fun MainScreen(
                         if (updated > 0) "Endpoints updated" else "Already up to date",
                         Toast.LENGTH_SHORT
                     ).show()
+                    checkAppUpdate(showToast)
                 }
             }
         }
     }
 
-    // Initial R2 sync on launch
-    LaunchedEffect(Unit) { syncEndpoints(false) }
+    // Initial R2 sync and update check on launch
+    LaunchedEffect(Unit) {
+        syncEndpoints(false)
+        checkAppUpdate(false)
+    }
 
     // Active 5-second polling — only while in foreground on a device page
     LaunchedEffect(pagerState.currentPage, isAppInForeground, devices.size) {
@@ -232,6 +281,27 @@ fun MainScreen(
                     }
                 },
                 actions = {
+                    if (availableUpdate != null) {
+                        Row(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(GreenVibrant.copy(alpha = 0.15f))
+                                .border(1.dp, GreenVibrant.copy(alpha = 0.4f), RoundedCornerShape(8.dp))
+                                .clickable { showUpdateDialog = true }
+                                .padding(horizontal = 8.dp, vertical = 5.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Default.SystemUpdate, null, tint = GreenVibrant, modifier = Modifier.size(13.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                "v${availableUpdate!!.versionName}",
+                                color = GreenVibrant,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(4.dp))
+                    }
                     IconButton(onClick = { syncEndpoints(true) }, enabled = !isSyncing) {
                         Icon(
                             Icons.Default.Refresh,
@@ -299,7 +369,36 @@ fun MainScreen(
                     onDismissStatus = { statusStates.remove(dev.id) },
                     onRefreshStatus = { refreshStatus(dev, showIndicator = true) },
                     onTrigger = { action -> executeAction(dev, action) },
-                    onDelete = { d -> repository.deleteDevice(d.id); devices = repository.getDevices() }
+                    onDelete = { d -> repository.deleteDevice(d.id); devices = repository.getDevices() },
+                    onSyncConfig = {
+                        triggerClient.fetchR2Config(dev.r2Url) { result ->
+                            result.onSuccess { ep ->
+                                val changed = repository.updateEndpoints(dev.id, ep.powerOn, ep.powerOff, ep.reboot, ep.status)
+                                devices = repository.getDevices()
+                                val msg = if (changed) "Endpoints updated from R2" else "Endpoints already up to date"
+                                statusStates[dev.id] = msg to true
+                                refreshStatus(dev, showIndicator = true)
+                            }.onFailure { ex ->
+                                statusStates[dev.id] = "Failed to fetch R2: ${ex.message}" to false
+                            }
+                        }
+                    },
+                    onUpdateDevice = { updated ->
+                        repository.updateDevice(updated)
+                        devices = repository.getDevices()
+                        if (updated.r2Url.isNotBlank() && updated.r2Url != dev.r2Url) {
+                            triggerClient.fetchR2Config(updated.r2Url) { result ->
+                                result.onSuccess { ep ->
+                                    repository.updateEndpoints(updated.id, ep.powerOn, ep.powerOff, ep.reboot, ep.status)
+                                    devices = repository.getDevices()
+                                    statusStates[updated.id] = "Device & endpoints updated" to true
+                                    refreshStatus(updated, showIndicator = true)
+                                }
+                            }
+                        } else {
+                            statusStates[updated.id] = "Device updated" to true
+                        }
+                    }
                 )
             } else {
                 AddDevicePage(
@@ -316,5 +415,25 @@ fun MainScreen(
                 )
             }
         }
+    }
+
+    if (showUpdateDialog && availableUpdate != null) {
+        UpdateDialog(
+            releaseInfo = availableUpdate!!,
+            currentVersion = BuildConfig.VERSION_NAME,
+            downloadState = downloadState,
+            onDownload = {
+                downloadState = DownloadState.Downloading(0, 0, availableUpdate!!.sizeBytes)
+                updateManager.downloadApk(availableUpdate!!.downloadUrl) { state ->
+                    downloadState = state
+                }
+            },
+            onInstall = { file ->
+                updateManager.installApk(file)
+            },
+            onDismiss = {
+                showUpdateDialog = false
+            }
+        )
     }
 }

@@ -29,19 +29,25 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.PowerOff
 import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Terminal
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -58,6 +64,8 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.expapp.trigger.data.model.DeviceConfig
@@ -66,6 +74,7 @@ import com.expapp.trigger.network.TriggerAction
 import com.expapp.trigger.ui.components.ActionConfirmDialog
 import com.expapp.trigger.ui.components.HugeActionButton
 import com.expapp.trigger.ui.components.StatusBanner
+import com.expapp.trigger.ui.theme.AmberVibrant
 import com.expapp.trigger.ui.theme.BgElevated
 import com.expapp.trigger.ui.theme.BgSurface
 import com.expapp.trigger.ui.theme.BorderDefault
@@ -100,10 +109,111 @@ fun DevicePage(
     onRefreshStatus: () -> Unit,
     onTrigger: (TriggerAction) -> Unit,
     onDelete: (DeviceConfig) -> Unit,
+    onSyncConfig: () -> Unit = {},
+    onUpdateDevice: (DeviceConfig) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var pendingAction by remember { mutableStateOf<TriggerAction?>(null) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
+    var showEditDialog by remember { mutableStateOf(false) }
+
+    if (showEditDialog) {
+        var editName by remember { mutableStateOf(device.name) }
+        var editNode by remember { mutableStateOf(device.node) }
+        var editR2Url by remember { mutableStateOf(device.r2Url) }
+        var editSecretKey by remember { mutableStateOf(device.secretKey) }
+        var showKey by remember { mutableStateOf(false) }
+
+        val editFieldColors = OutlinedTextFieldDefaults.colors(
+            focusedBorderColor = GreenVibrant,
+            unfocusedBorderColor = BorderDefault,
+            focusedLabelColor = GreenVibrant,
+            unfocusedLabelColor = TextSecondary,
+            cursorColor = GreenVibrant,
+            focusedTextColor = TextPrimary,
+            unfocusedTextColor = TextPrimary
+        )
+
+        AlertDialog(
+            onDismissRequest = { showEditDialog = false },
+            containerColor = BgSurface,
+            shape = RoundedCornerShape(20.dp),
+            title = { Text("Edit Device", color = TextPrimary, fontWeight = FontWeight.Bold) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    OutlinedTextField(
+                        value = editName,
+                        onValueChange = { editName = it },
+                        label = { Text("Device Name") },
+                        singleLine = true,
+                        colors = editFieldColors,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = editNode,
+                        onValueChange = { editNode = it },
+                        label = { Text("Node Identifier") },
+                        singleLine = true,
+                        colors = editFieldColors,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = editR2Url,
+                        onValueChange = { editR2Url = it },
+                        label = { Text("Cloudflare R2 JSON URL") },
+                        singleLine = true,
+                        colors = editFieldColors,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = editSecretKey,
+                        onValueChange = { editSecretKey = it },
+                        label = { Text("Secret Key") },
+                        trailingIcon = {
+                            IconButton(onClick = { showKey = !showKey }) {
+                                Icon(
+                                    if (showKey) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                    null,
+                                    tint = TextSecondary
+                                )
+                            }
+                        },
+                        visualTransformation = if (showKey) VisualTransformation.None else PasswordVisualTransformation(),
+                        singleLine = true,
+                        colors = editFieldColors,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showEditDialog = false
+                        val updated = device.copy(
+                            name = editName.trim().ifBlank { device.name },
+                            node = editNode.trim().ifBlank { device.node },
+                            r2Url = editR2Url.trim(),
+                            secretKey = editSecretKey.trim()
+                        )
+                        onUpdateDevice(updated)
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = GreenVibrant.copy(alpha = 0.2f)),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text("Save", color = GreenVibrant, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showEditDialog = false }) {
+                    Text("Cancel", color = TextSecondary)
+                }
+            }
+        )
+    }
 
     if (pendingAction != null) {
         ActionConfirmDialog(
@@ -273,6 +383,44 @@ fun DevicePage(
                             )
                         }
                     }
+
+                    // Re-fetch R2 JSON config button
+                    IconButton(
+                        onClick = onSyncConfig,
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(AmberVibrant.copy(alpha = 0.08f))
+                            .border(1.dp, AmberVibrant.copy(alpha = 0.2f), RoundedCornerShape(10.dp))
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CloudSync,
+                            contentDescription = "Re-fetch R2 JSON",
+                            tint = AmberVibrant,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(6.dp))
+
+                    // Edit device button
+                    IconButton(
+                        onClick = { showEditDialog = true },
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(BorderSubtle.copy(alpha = 0.3f))
+                            .border(1.dp, BorderSubtle, RoundedCornerShape(10.dp))
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Edit,
+                            contentDescription = "Edit device",
+                            tint = TextSecondary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(6.dp))
 
                     // Refresh button (spins while checking)
                     IconButton(
