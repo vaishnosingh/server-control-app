@@ -136,11 +136,12 @@ class ActionTriggerWorker(
         triggerClient: TriggerClient,
         appSettings: AppSettings
     ) {
-        val maxAttempts = 15 // Up to 60 seconds (15 attempts * 4s)
+        val maxAttempts = 30 // Up to 60 seconds (30 attempts * 2s) for instant notification
         var attempts = 0
+        var consecutiveTargetMatches = 0
 
-        // Brief delay for hardware/OS to begin reaction
-        delay(4000L)
+        // Brief delay before first check to allow server to receive trigger
+        delay(1500L)
 
         while (attempts < maxAttempts) {
             attempts++
@@ -148,42 +149,54 @@ class ActionTriggerWorker(
 
             // If phone network is unavailable, do not misinterpret as server going offline
             if (!status.isReachable) {
-                delay(4000L)
+                delay(2000L)
                 continue
             }
 
             when (action) {
                 TriggerAction.POWER_ON -> {
                     if (status.isOnline) {
-                        appSettings.setLastStatus(device.id, true)
-                        NotificationHelper.sendNotification(
-                            context = appContext,
-                            id = device.id.hashCode(),
-                            title = "✅ Server Online",
-                            message = "${device.name} is now online and reachable.",
-                            isSuccess = true
-                        )
-                        ServerWidgetProvider.updateAllWidgets(appContext)
-                        return
+                        consecutiveTargetMatches++
+                        // Require 2 consecutive online confirmations (or 1 if status explicitly verified)
+                        if (consecutiveTargetMatches >= 2 || status.statusText == "ONLINE") {
+                            appSettings.setLastStatus(device.id, true)
+                            NotificationHelper.sendNotification(
+                                context = appContext,
+                                id = device.id.hashCode(),
+                                title = "✅ Server Online",
+                                message = "${device.name} is now online and reachable.",
+                                isSuccess = true
+                            )
+                            ServerWidgetProvider.updateAllWidgets(appContext)
+                            return
+                        }
+                    } else {
+                        consecutiveTargetMatches = 0
                     }
                 }
                 TriggerAction.POWER_OFF -> {
                     if (!status.isOnline) {
-                        appSettings.setLastStatus(device.id, false)
-                        NotificationHelper.sendNotification(
-                            context = appContext,
-                            id = device.id.hashCode(),
-                            title = "⚠️ Server Offline",
-                            message = "${device.name} has powered off or is offline.",
-                            isSuccess = false
-                        )
-                        ServerWidgetProvider.updateAllWidgets(appContext)
-                        return
+                        consecutiveTargetMatches++
+                        // Require 2 consecutive offline confirmations to completely eliminate false positives
+                        if (consecutiveTargetMatches >= 2) {
+                            appSettings.setLastStatus(device.id, false)
+                            NotificationHelper.sendNotification(
+                                context = appContext,
+                                id = device.id.hashCode(),
+                                title = "⚠️ Server Offline",
+                                message = "${device.name} has powered off or is offline.",
+                                isSuccess = false
+                            )
+                            ServerWidgetProvider.updateAllWidgets(appContext)
+                            return
+                        }
+                    } else {
+                        consecutiveTargetMatches = 0
                     }
                 }
                 TriggerAction.REBOOT -> {
                     // No notification for reboot per user instructions
-                    if (attempts >= 2 && status.isOnline) {
+                    if (attempts >= 4 && status.isOnline) {
                         appSettings.setLastStatus(device.id, true)
                         ServerWidgetProvider.updateAllWidgets(appContext)
                         return
@@ -191,7 +204,7 @@ class ActionTriggerWorker(
                 }
             }
 
-            delay(4000L)
+            delay(2000L)
         }
     }
 }

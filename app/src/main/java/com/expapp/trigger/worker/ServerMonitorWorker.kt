@@ -91,7 +91,7 @@ class ServerMonitorWorker(
         for (device in devices) {
             if (device.statusUrl.isBlank()) continue
 
-            val status = triggerClient.checkStatusSync(device)
+            var status = triggerClient.checkStatusSync(device)
             
             // If the endpoint could not be reached (e.g. phone has no internet / network failure),
             // do NOT treat this as the server going offline. Maintain the last known state.
@@ -101,7 +101,20 @@ class ServerMonitorWorker(
 
             val previousStatus = appSettings.getLastStatus(device.id)
 
-            // Save new status
+            // If a transition is detected (especially online -> offline or offline -> online),
+            // double-check with an immediate secondary request after 2 seconds to eliminate false positives
+            if (previousStatus != null && previousStatus != status.isOnline) {
+                kotlinx.coroutines.delay(2000L)
+                val verificationStatus = triggerClient.checkStatusSync(device)
+                if (verificationStatus.isReachable && verificationStatus.isOnline == status.isOnline) {
+                    status = verificationStatus
+                } else {
+                    // False positive or transient state; do not change status or trigger false alert
+                    continue
+                }
+            }
+
+            // Save new verified status
             appSettings.setLastStatus(device.id, status.isOnline)
 
             // Determine if notification is needed only when server actually transitions

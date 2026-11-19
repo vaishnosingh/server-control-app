@@ -248,8 +248,16 @@ class TriggerClient(
                             }
                         }
                     }
-                    // If targetNode not matched or not provided, fallback to root or first entry
-                    matchedObj ?: if (nodesObj.size() > 0) nodesObj.entrySet().first().value.asJsonObject else rootJson
+                    if (matchedObj != null) {
+                        matchedObj
+                    } else if (targetNode.isNotBlank()) {
+                        // Node explicitly configured but missing from sentinel nodes map
+                        return NodeStatus(isOnline = false, statusText = "UNKNOWN NODE", isReachable = true)
+                    } else if (nodesObj.size() > 0) {
+                        nodesObj.entrySet().first().value.asJsonObject
+                    } else {
+                        rootJson
+                    }
                 } else {
                     rootJson
                 }
@@ -258,7 +266,7 @@ class TriggerClient(
                     json.has("online") && json.get("online").isJsonPrimitive && json.get("online").asJsonPrimitive.isBoolean ->
                         json.get("online").asBoolean
                     json.has("status") && json.get("status").isJsonPrimitive ->
-                        json.get("status").asString.equals("online", ignoreCase = true)
+                        json.get("status").asString.trim().equals("online", ignoreCase = true)
                     else -> false
                 }
                 val ip = if (json.has("ip") && !json.get("ip").isJsonNull) json.get("ip").asString else null
@@ -288,10 +296,10 @@ class TriggerClient(
                     isReachable = true
                 )
             } catch (e: Exception) {
-                NodeStatus(isOnline = false, statusText = "ERROR", isReachable = true)
+                NodeStatus(isOnline = false, statusText = "ERROR", isReachable = isHttpSuccess)
             }
         } else if (isHttpSuccess) {
-            val isOnline = body.equals("ONLINE", ignoreCase = true)
+            val isOnline = body.trim().equals("ONLINE", ignoreCase = true)
             return NodeStatus(isOnline = isOnline, statusText = if (isOnline) "ONLINE" else "OFFLINE", isReachable = true)
         } else {
             return NodeStatus(isOnline = false, statusText = "OFFLINE", isReachable = false)
