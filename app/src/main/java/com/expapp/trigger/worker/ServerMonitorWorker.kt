@@ -120,6 +120,24 @@ class ServerMonitorWorker(
             }
         }
 
+        // Check for app updates in the background and notify if a new update is found
+        try {
+            val updateManager = com.expapp.trigger.update.UpdateManager(appContext)
+            val currentVersion = com.expapp.trigger.BuildConfig.VERSION_NAME
+            updateManager.checkForUpdate(currentVersion) { result ->
+                if (result is com.expapp.trigger.update.UpdateCheckResult.UpdateAvailable) {
+                    val newVer = result.info.versionName
+                    val lastNotified = appSettings.lastNotifiedUpdateVersion
+                    if (lastNotified != newVer) {
+                        appSettings.lastNotifiedUpdateVersion = newVer
+                        NotificationHelper.sendUpdateAvailableNotification(appContext, newVer)
+                    }
+                }
+            }
+        } catch (_: Exception) {
+            // Ignore background check failure
+        }
+
         return Result.success()
     }
 }

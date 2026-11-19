@@ -210,6 +210,11 @@ fun MainScreen(
                 is UpdateCheckResult.UpdateAvailable -> {
                     availableUpdate = result.info
                     showUpdateDialog = true
+                    val newVer = result.info.versionName
+                    if (appSettings.lastNotifiedUpdateVersion != newVer) {
+                        appSettings.lastNotifiedUpdateVersion = newVer
+                        com.expapp.trigger.worker.NotificationHelper.sendUpdateAvailableNotification(context, newVer)
+                    }
                     if (isManual) {
                         Toast.makeText(context, "New update available: v${result.info.versionName}!", Toast.LENGTH_SHORT).show()
                     }

@@ -10,7 +10,15 @@ class AppSettings(private val storage: KeyValueStorage) {
         private const val KEY_BIOMETRIC_ENABLED = "key_biometric_enabled"
         private const val KEY_BG_MONITOR_ENABLED = "key_bg_monitor_enabled"
         private const val KEY_LAST_STATUS_PREFIX = "last_status_"
+        private const val KEY_LAST_NOTIFIED_VERSION = "key_last_notified_version"
     }
+
+    var lastNotifiedUpdateVersion: String?
+        get() = storage.getString(KEY_LAST_NOTIFIED_VERSION, null)
+        set(value) {
+            if (value != null) storage.putString(KEY_LAST_NOTIFIED_VERSION, value)
+            else storage.remove(KEY_LAST_NOTIFIED_VERSION)
+        }
 
     var isBiometricEnabled: Boolean
         get() = storage.getBoolean(KEY_BIOMETRIC_ENABLED, true)

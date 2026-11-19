@@ -45,12 +45,16 @@ object NotificationHelper {
         id: Int,
         title: String,
         message: String,
-        isSuccess: Boolean = true
+        isSuccess: Boolean = true,
+        extraAction: String? = null
     ): Boolean {
         createNotificationChannel(context)
 
         val intent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            if (extraAction != null) {
+                putExtra("action_trigger", extraAction)
+            }
         }
         val pendingIntent = PendingIntent.getActivity(
             context,
@@ -79,6 +83,17 @@ object NotificationHelper {
         } catch (e: SecurityException) {
             false
         }
+    }
+
+    fun sendUpdateAvailableNotification(context: Context, newVersion: String): Boolean {
+        return sendNotification(
+            context = context,
+            id = 8888,
+            title = "🚀 Update Available: v$newVersion",
+            message = "A new version (v$newVersion) of Device Trigger is ready to install. Tap to update!",
+            isSuccess = true,
+            extraAction = "open_update"
+        )
     }
 
     fun sendTestNotification(context: Context): Boolean {
