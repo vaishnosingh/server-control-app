@@ -93,7 +93,11 @@ class SysPulseClient(
 
     fun resolveBaseUrl(device: DeviceConfig, nodeStatus: NodeStatus? = null): String {
         if (device.syspulseUrl.isNotBlank()) {
-            return device.syspulseUrl.trim().removeSuffix("/")
+            return device.syspulseUrl.trim()
+                .removeSuffix("/")
+                .removeSuffix("/api/status")
+                .removeSuffix("/api")
+                .removeSuffix("/")
         }
         val ip = nodeStatus?.ip?.trim()
         if (!ip.isNullOrBlank()) {
