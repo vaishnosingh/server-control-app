@@ -44,6 +44,113 @@ class UpdateManager(
     }
 
     /**
+     * Synchronously checks GitHub Releases API for the latest published release.
+     * Suitable for use inside background workers (e.g. WorkManager CoroutineWorker).
+     */
+    fun checkForUpdateSync(currentVersionName: String): UpdateCheckResult {
+        val url = "https://api.github.com/repos/$githubRepo/releases"
+        val request = Request.Builder()
+            .url(url)
+            .addHeader("Accept", "application/vnd.github.v3+json")
+            .addHeader("User-Agent", "ServerControlApp")
+            .get()
+            .build()
+
+        return try {
+            val response = okHttpClient.newCall(request).execute()
+            response.use { res ->
+                if (res.code == 404) {
+                    return UpdateCheckResult.UpToDate
+                }
+                if (!res.isSuccessful) {
+                    return UpdateCheckResult.Error("HTTP ${res.code}: Unable to check updates")
+                }
+                val body = res.body?.string().orEmpty()
+                parseReleases(body, currentVersionName)
+            }
+        } catch (e: Exception) {
+            UpdateCheckResult.Error("Network error: ${e.localizedMessage}")
+        }
+    }
+
+    private fun parseReleases(body: String, currentVersionName: String): UpdateCheckResult {
+        return try {
+            val jsonElement = JsonParser.parseString(body)
+            val releasesArray = if (jsonElement.isJsonArray) {
+                jsonElement.asJsonArray
+            } else {
+                val arr = com.google.gson.JsonArray()
+                if (jsonElement.isJsonObject) arr.add(jsonElement.asJsonObject)
+                arr
+            }
+
+            var highestRelease: ReleaseInfo? = null
+
+            for (item in releasesArray) {
+                if (!item.isJsonObject) continue
+                val json = item.asJsonObject
+                if (json.has("draft") && json.get("draft").asBoolean) continue
+
+                val tagName = json.get("tag_name")?.asString.orEmpty()
+                val cleanVer = tagName.removePrefix("v").removePrefix("V").trim()
+                val title = json.get("name")?.asString?.ifBlank { tagName } ?: tagName
+                val changelog = json.get("body")?.asString.orEmpty()
+
+                val assets = json.getAsJsonArray("assets")
+                var apkUrl: String? = null
+                var apkApiUrl: String? = null
+                var apkName = "app-release.apk"
+                var apkSize = 0L
+
+                if (assets != null) {
+                    for (element in assets) {
+                        val assetObj = element.asJsonObject
+                        val name = assetObj.get("name")?.asString.orEmpty()
+                        if (name.endsWith(".apk", ignoreCase = true)) {
+                            apkUrl = assetObj.get("browser_download_url")?.asString
+                            apkApiUrl = assetObj.get("url")?.asString
+                            apkName = name
+                            apkSize = assetObj.get("size")?.asLong ?: 0L
+                            break
+                        }
+                    }
+                }
+
+                if (!apkUrl.isNullOrBlank()) {
+                    val releaseInfo = ReleaseInfo(
+                        tagName = tagName,
+                        versionName = cleanVer,
+                        title = title,
+                        changelog = changelog,
+                        downloadUrl = apkUrl,
+                        assetApiUrl = apkApiUrl,
+                        apkFileName = apkName,
+                        sizeBytes = apkSize
+                    )
+
+                    if (highestRelease == null || isNewerVersion(cleanVer, highestRelease.versionName)) {
+                        highestRelease = releaseInfo
+                    }
+                }
+            }
+
+            if (highestRelease == null) {
+                return UpdateCheckResult.UpToDate
+            }
+
+            val cleanLocalVersion = currentVersionName.removePrefix("v").removePrefix("V").trim()
+
+            if (isNewerVersion(highestRelease.versionName, cleanLocalVersion)) {
+                UpdateCheckResult.UpdateAvailable(highestRelease)
+            } else {
+                UpdateCheckResult.UpToDate
+            }
+        } catch (e: Exception) {
+            UpdateCheckResult.Error("Failed to parse update info: ${e.message}")
+        }
+    }
+
+    /**
      * Checks GitHub Releases API for the latest published release.
      */
     fun checkForUpdate(
@@ -81,86 +188,8 @@ class UpdateManager(
                     }
 
                     val body = res.body?.string().orEmpty()
-                    try {
-                        val jsonElement = JsonParser.parseString(body)
-                        val releasesArray = if (jsonElement.isJsonArray) {
-                            jsonElement.asJsonArray
-                        } else {
-                            // In case a single release object was returned
-                            val arr = com.google.gson.JsonArray()
-                            if (jsonElement.isJsonObject) arr.add(jsonElement.asJsonObject)
-                            arr
-                        }
-
-                        var highestRelease: ReleaseInfo? = null
-
-                        for (item in releasesArray) {
-                            if (!item.isJsonObject) continue
-                            val json = item.asJsonObject
-                            if (json.has("draft") && json.get("draft").asBoolean) continue
-
-                            val tagName = json.get("tag_name")?.asString.orEmpty()
-                            val cleanVer = tagName.removePrefix("v").removePrefix("V").trim()
-                            val title = json.get("name")?.asString?.ifBlank { tagName } ?: tagName
-                            val changelog = json.get("body")?.asString.orEmpty()
-
-                            val assets = json.getAsJsonArray("assets")
-                            var apkUrl: String? = null
-                            var apkApiUrl: String? = null
-                            var apkName = "app-release.apk"
-                            var apkSize = 0L
-
-                            if (assets != null) {
-                                for (element in assets) {
-                                    val assetObj = element.asJsonObject
-                                    val name = assetObj.get("name")?.asString.orEmpty()
-                                    if (name.endsWith(".apk", ignoreCase = true)) {
-                                        apkUrl = assetObj.get("browser_download_url")?.asString
-                                        apkApiUrl = assetObj.get("url")?.asString
-                                        apkName = name
-                                        apkSize = assetObj.get("size")?.asLong ?: 0L
-                                        break
-                                    }
-                                }
-                            }
-
-                            if (!apkUrl.isNullOrBlank()) {
-                                val releaseInfo = ReleaseInfo(
-                                    tagName = tagName,
-                                    versionName = cleanVer,
-                                    title = title,
-                                    changelog = changelog,
-                                    downloadUrl = apkUrl,
-                                    assetApiUrl = apkApiUrl,
-                                    apkFileName = apkName,
-                                    sizeBytes = apkSize
-                                )
-
-                                if (highestRelease == null || isNewerVersion(cleanVer, highestRelease.versionName)) {
-                                    highestRelease = releaseInfo
-                                }
-                            }
-                        }
-
-                        if (highestRelease == null) {
-                            runOnMain { callback(UpdateCheckResult.UpToDate) }
-                            return
-                        }
-
-                        val cleanLocalVersion = currentVersionName.removePrefix("v").removePrefix("V").trim()
-
-                        if (isNewerVersion(highestRelease.versionName, cleanLocalVersion)) {
-                            runOnMain {
-                                callback(UpdateCheckResult.UpdateAvailable(highestRelease))
-                            }
-                        } else {
-                            runOnMain { callback(UpdateCheckResult.UpToDate) }
-                        }
-                    } catch (e: Exception) {
-                        runOnMain {
-                            callback(UpdateCheckResult.Error("Failed to parse update info: ${e.message}"))
-                        }
-                    }
+                    val result = parseReleases(body, currentVersionName)
+                    runOnMain { callback(result) }
                 }
             }
         })

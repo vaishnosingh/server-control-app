@@ -38,7 +38,6 @@ import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.PowerOff
 import androidx.compose.material.icons.filled.PowerSettingsNew
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Terminal
@@ -262,15 +261,8 @@ fun DevicePage(
         )
     }
 
-    // Spin animation for refresh icon
-    val infiniteTransition = rememberInfiniteTransition(label = "refresh_spin")
-    val spinAngle by infiniteTransition.animateFloat(
-        initialValue = 0f, targetValue = 360f,
-        animationSpec = infiniteRepeatable(tween(900, easing = LinearEasing)),
-        label = "spin"
-    )
-
     // Pulse for online dot
+    val infiniteTransition = rememberInfiniteTransition(label = "pulse_transition")
     val pulseScale by infiniteTransition.animateFloat(
         initialValue = 0.8f, targetValue = 1.5f,
         animationSpec = infiniteRepeatable(
@@ -394,99 +386,61 @@ fun DevicePage(
                         )
                     }
 
-                    // Compact, non-overlapping actions: Single Refresh + Overflow Menu
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        // Refresh button (syncs status & R2 endpoints)
+                    // Device options menu (Edit / Delete)
+                    Box {
                         IconButton(
-                            onClick = {
-                                if (!isCheckingStatus) {
-                                    onRefreshStatus()
-                                    onSyncConfig()
-                                }
-                            },
+                            onClick = { showMenu = true },
                             modifier = Modifier
                                 .size(34.dp)
                                 .clip(RoundedCornerShape(9.dp))
-                                .background(
-                                    if (isCheckingStatus) GreenVibrant.copy(alpha = 0.15f)
-                                    else BorderSubtle.copy(alpha = 0.25f)
-                                )
-                                .border(
-                                    1.dp,
-                                    if (isCheckingStatus) GreenVibrant.copy(alpha = 0.4f)
-                                    else BorderSubtle,
-                                    RoundedCornerShape(9.dp)
-                                )
+                                .background(BorderSubtle.copy(alpha = 0.25f))
+                                .border(1.dp, BorderSubtle, RoundedCornerShape(9.dp))
                         ) {
                             Icon(
-                                imageVector = Icons.Default.Refresh,
-                                contentDescription = "Refresh server",
-                                tint = if (isCheckingStatus) GreenVibrant else TextSecondary,
-                                modifier = Modifier
-                                    .size(17.dp)
-                                    .rotate(if (isCheckingStatus) spinAngle else 0f)
+                                imageVector = Icons.Default.MoreVert,
+                                contentDescription = "Device options",
+                                tint = TextSecondary,
+                                modifier = Modifier.size(18.dp)
                             )
                         }
 
-                        // More Options Overflow (Edit / Delete)
-                        Box {
-                            IconButton(
-                                onClick = { showMenu = true },
-                                modifier = Modifier
-                                    .size(34.dp)
-                                    .clip(RoundedCornerShape(9.dp))
-                                    .background(BorderSubtle.copy(alpha = 0.25f))
-                                    .border(1.dp, BorderSubtle, RoundedCornerShape(9.dp))
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.MoreVert,
-                                    contentDescription = "Device options",
-                                    tint = TextSecondary,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
-
-                            DropdownMenu(
-                                expanded = showMenu,
-                                onDismissRequest = { showMenu = false },
-                                modifier = Modifier
-                                    .background(BgElevated)
-                                    .border(1.dp, BorderSubtle, RoundedCornerShape(12.dp))
-                            ) {
-                                DropdownMenuItem(
-                                    text = { Text("Edit Device", color = TextPrimary) },
-                                    leadingIcon = {
-                                        Icon(
-                                            Icons.Default.Edit,
-                                            contentDescription = null,
-                                            tint = TextSecondary,
-                                            modifier = Modifier.size(18.dp)
-                                        )
-                                    },
-                                    onClick = {
-                                        showMenu = false
-                                        showEditDialog = true
-                                    }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("Remove Device", color = RedVibrant) },
-                                    leadingIcon = {
-                                        Icon(
-                                            Icons.Default.DeleteOutline,
-                                            contentDescription = null,
-                                            tint = RedVibrant,
-                                            modifier = Modifier.size(18.dp)
-                                        )
-                                    },
-                                    onClick = {
-                                        showMenu = false
-                                        showDeleteConfirm = true
-                                    }
-                                )
-                            }
+                        DropdownMenu(
+                            expanded = showMenu,
+                            onDismissRequest = { showMenu = false },
+                            modifier = Modifier
+                                .background(BgElevated)
+                                .border(1.dp, BorderSubtle, RoundedCornerShape(12.dp))
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("Edit Device", color = TextPrimary) },
+                                leadingIcon = {
+                                    Icon(
+                                        Icons.Default.Edit,
+                                        contentDescription = null,
+                                        tint = TextSecondary,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                },
+                                onClick = {
+                                    showMenu = false
+                                    showEditDialog = true
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Remove Device", color = RedVibrant) },
+                                leadingIcon = {
+                                    Icon(
+                                        Icons.Default.DeleteOutline,
+                                        contentDescription = null,
+                                        tint = RedVibrant,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                },
+                                onClick = {
+                                    showMenu = false
+                                    showDeleteConfirm = true
+                                }
+                            )
                         }
                     }
                 }
