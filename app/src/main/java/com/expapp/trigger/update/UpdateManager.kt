@@ -50,19 +50,26 @@ class UpdateManager(
      * Suitable for use inside background workers (e.g. WorkManager CoroutineWorker).
      */
     fun checkForUpdateSync(currentVersionName: String): UpdateCheckResult {
-        // 1. Try Primary: Self-hosted Git server (forge.linuxguy.space)
+        // Query both primary (forge) and fallback (GitHub) and pick the highest available release
         val primaryResult = queryReleasesSync(primaryReleasesUrl, currentVersionName)
-        if (primaryResult is UpdateCheckResult.UpdateAvailable || primaryResult is UpdateCheckResult.UpToDate) {
-            return primaryResult
-        }
-
-        // 2. Fallback: GitHub releases API
         val fallbackResult = queryReleasesSync(fallbackReleasesUrl, currentVersionName)
-        if (fallbackResult is UpdateCheckResult.UpdateAvailable || fallbackResult is UpdateCheckResult.UpToDate) {
-            return fallbackResult
-        }
 
-        return primaryResult // Return original error if both failed
+        val primaryUpdate = if (primaryResult is UpdateCheckResult.UpdateAvailable) primaryResult.info else null
+        val fallbackUpdate = if (fallbackResult is UpdateCheckResult.UpdateAvailable) fallbackResult.info else null
+
+        return when {
+            primaryUpdate != null && fallbackUpdate != null -> {
+                if (isNewerVersion(primaryUpdate.versionName, fallbackUpdate.versionName)) {
+                    UpdateCheckResult.UpdateAvailable(primaryUpdate)
+                } else {
+                    UpdateCheckResult.UpdateAvailable(fallbackUpdate)
+                }
+            }
+            primaryUpdate != null -> UpdateCheckResult.UpdateAvailable(primaryUpdate)
+            fallbackUpdate != null -> UpdateCheckResult.UpdateAvailable(fallbackUpdate)
+            primaryResult is UpdateCheckResult.UpToDate || fallbackResult is UpdateCheckResult.UpToDate -> UpdateCheckResult.UpToDate
+            else -> primaryResult
+        }
     }
 
     private fun queryReleasesSync(url: String, currentVersionName: String): UpdateCheckResult {
@@ -97,19 +104,25 @@ class UpdateManager(
         currentVersionName: String,
         callback: (UpdateCheckResult) -> Unit
     ) {
-        // Try Primary first
         queryReleasesAsync(primaryReleasesUrl, currentVersionName) { primaryResult ->
-            if (primaryResult is UpdateCheckResult.UpdateAvailable || primaryResult is UpdateCheckResult.UpToDate) {
-                runOnMain { callback(primaryResult) }
-            } else {
-                // Primary failed, query GitHub fallback
-                queryReleasesAsync(fallbackReleasesUrl, currentVersionName) { fallbackResult ->
-                    if (fallbackResult is UpdateCheckResult.UpdateAvailable || fallbackResult is UpdateCheckResult.UpToDate) {
-                        runOnMain { callback(fallbackResult) }
-                    } else {
-                        runOnMain { callback(primaryResult) }
+            queryReleasesAsync(fallbackReleasesUrl, currentVersionName) { fallbackResult ->
+                val primaryUpdate = if (primaryResult is UpdateCheckResult.UpdateAvailable) primaryResult.info else null
+                val fallbackUpdate = if (fallbackResult is UpdateCheckResult.UpdateAvailable) fallbackResult.info else null
+
+                val finalResult = when {
+                    primaryUpdate != null && fallbackUpdate != null -> {
+                        if (isNewerVersion(primaryUpdate.versionName, fallbackUpdate.versionName)) {
+                            UpdateCheckResult.UpdateAvailable(primaryUpdate)
+                        } else {
+                            UpdateCheckResult.UpdateAvailable(fallbackUpdate)
+                        }
                     }
+                    primaryUpdate != null -> UpdateCheckResult.UpdateAvailable(primaryUpdate)
+                    fallbackUpdate != null -> UpdateCheckResult.UpdateAvailable(fallbackUpdate)
+                    primaryResult is UpdateCheckResult.UpToDate || fallbackResult is UpdateCheckResult.UpToDate -> UpdateCheckResult.UpToDate
+                    else -> if (primaryResult is UpdateCheckResult.Error) primaryResult else fallbackResult
                 }
+                runOnMain { callback(finalResult) }
             }
         }
     }
