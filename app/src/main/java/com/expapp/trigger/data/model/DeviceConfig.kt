@@ -11,5 +11,7 @@ data class DeviceConfig(
     val powerOnUrl: String,
     val powerOffUrl: String,
     val rebootUrl: String,
-    val statusUrl: String = ""
+    val statusUrl: String = "",
+    val syspulseUrl: String = "",
+    val syspulseSecretKey: String = ""
 )

@@ -27,6 +27,26 @@ class R2ConfigParserTest {
     }
 
     @Test
+    fun parse_withSysPulseEndpoints_returnsSysPulseData() {
+        val json = """
+            {
+                "poweron": "https://cosmos.linuxguy.space/poweron",
+                "poweroff": "https://cosmos.linuxguy.space/poweroff",
+                "reboot": "https://cosmos.linuxguy.space/reboot",
+                "status": "https://cosmos.linuxguy.space/status",
+                "syspulse": "http://100.85.63.44:8088",
+                "syspulse_secret": "my_secret_key"
+            }
+        """.trimIndent()
+
+        val result = R2ConfigParser.parse(json)
+        assertTrue(result.isSuccess)
+        val endpoints = result.getOrThrow()
+        assertEquals("http://100.85.63.44:8088", endpoints.syspulse)
+        assertEquals("my_secret_key", endpoints.syspulseSecret)
+    }
+
+    @Test
     fun parse_camelCaseAndUnderscoreKeys_returnsEndpoints() {
         val json = """
             {

@@ -83,7 +83,9 @@ class DeviceRepositoryTest {
             deviceId = "dev-1",
             powerOnUrl = "https://new.url/on",
             powerOffUrl = "https://new.url/off",
-            rebootUrl = "https://new.url/reboot"
+            rebootUrl = "https://new.url/reboot",
+            syspulseUrl = "http://100.85.63.44:8088",
+            syspulseSecretKey = "secret123"
         )
 
         assertTrue(updated)
@@ -91,6 +93,8 @@ class DeviceRepositoryTest {
         assertEquals("https://new.url/on", saved.powerOnUrl)
         assertEquals("https://new.url/off", saved.powerOffUrl)
         assertEquals("https://new.url/reboot", saved.rebootUrl)
+        assertEquals("http://100.85.63.44:8088", saved.syspulseUrl)
+        assertEquals("secret123", saved.syspulseSecretKey)
     }
 
     @Test

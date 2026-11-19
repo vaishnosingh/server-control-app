@@ -6,7 +6,9 @@ data class ParsedEndpoints(
     val powerOn: String,
     val powerOff: String,
     val reboot: String,
-    val status: String = ""
+    val status: String = "",
+    val syspulse: String = "",
+    val syspulseSecret: String = ""
 )
 
 object R2ConfigParser {
@@ -47,11 +49,25 @@ object R2ConfigParser {
                 ?: normalizedMap["health"]
                 ?: ""
 
+            val syspulse = normalizedMap["syspulse"]
+                ?: normalizedMap["pulse"]
+                ?: normalizedMap["metrics"]
+                ?: normalizedMap["dashboard"]
+                ?: normalizedMap["syspulseurl"]
+                ?: ""
+
+            val syspulseSecret = normalizedMap["syspulsesecret"]
+                ?: normalizedMap["pulsesecret"]
+                ?: normalizedMap["pulsekey"]
+                ?: ""
+
             ParsedEndpoints(
                 powerOn = powerOn,
                 powerOff = powerOff,
                 reboot = reboot,
-                status = status
+                status = status,
+                syspulse = syspulse,
+                syspulseSecret = syspulseSecret
             )
         }
     }

@@ -189,7 +189,15 @@ fun MainScreen(
             triggerClient.fetchR2Config(device.r2Url) { result ->
                 completed++
                 result.onSuccess { ep ->
-                    val changed = repository.updateEndpoints(device.id, ep.powerOn, ep.powerOff, ep.reboot, ep.status)
+                    val changed = repository.updateEndpoints(
+                        device.id,
+                        ep.powerOn,
+                        ep.powerOff,
+                        ep.reboot,
+                        ep.status,
+                        ep.syspulse,
+                        ep.syspulseSecret
+                    )
                     if (changed) { updated++; devices = repository.getDevices() }
                 }
                 if (completed == total) {
@@ -519,6 +527,15 @@ fun MainScreen(
                             repository.updateDevice(updated)
                             devices = repository.getDevices()
                             refreshStatus(updated, showIndicator = true)
+                        },
+                        onRequireBiometric = { title, subtitle, onAuthorized ->
+                            if (appSettings.isBiometricEnabled && BiometricHelper.isBiometricAvailable(context)) {
+                                requestBiometricAuth(title, subtitle) { success ->
+                                    if (success) onAuthorized()
+                                }
+                            } else {
+                                onAuthorized()
+                            }
                         }
                     )
                 } else {

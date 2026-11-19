@@ -108,9 +108,22 @@ class MainActivity : FragmentActivity() {
                     r2Url = "https://bucket.linuxguy.space/home-server-app/endpoints.json",
                     rebootUrl = "https://cosmos.linuxguy.space/reboot?node=debian",
                     secretKey = "Carbon@12",
-                    statusUrl = "https://cosmos.linuxguy.space/status?node=debian"
+                    statusUrl = "https://cosmos.linuxguy.space/status?node=debian",
+                    syspulseUrl = "http://100.85.63.44:8088",
+                    syspulseSecretKey = "default_pulse_secret_key_change_me"
                 )
                 repository.addDevice(defaultDevice)
+            }
+        }
+
+        // Auto-upgrade existing default device with SysPulse defaults if missing
+        repository.getDevices().forEach { dev ->
+            if (dev.node.equals("debian", ignoreCase = true) && dev.syspulseUrl.isBlank()) {
+                val upgraded = dev.copy(
+                    syspulseUrl = "http://100.85.63.44:8088",
+                    syspulseSecretKey = if (dev.syspulseSecretKey.isBlank()) "default_pulse_secret_key_change_me" else dev.syspulseSecretKey
+                )
+                repository.updateDevice(upgraded)
             }
         }
         triggerClient = TriggerClient()

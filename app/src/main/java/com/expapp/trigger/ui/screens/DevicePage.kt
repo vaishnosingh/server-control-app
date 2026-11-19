@@ -15,6 +15,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -40,6 +41,7 @@ import androidx.compose.material.icons.filled.PowerOff
 import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
@@ -54,6 +56,7 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -73,12 +76,15 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.expapp.trigger.data.model.DeviceConfig
+import com.expapp.trigger.data.model.SysPulseStatus
 import com.expapp.trigger.network.NodeStatus
+import com.expapp.trigger.network.SysPulseClient
 import com.expapp.trigger.network.TriggerAction
 import com.expapp.trigger.ui.components.ActionConfirmDialog
 import com.expapp.trigger.ui.components.HugeActionButton
 import com.expapp.trigger.ui.components.StatusBanner
 import com.expapp.trigger.ui.theme.AmberVibrant
+import com.expapp.trigger.ui.theme.BgCard
 import com.expapp.trigger.ui.theme.BgElevated
 import com.expapp.trigger.ui.theme.BgSurface
 import com.expapp.trigger.ui.theme.BorderDefault
@@ -115,18 +121,35 @@ fun DevicePage(
     onDelete: (DeviceConfig) -> Unit,
     onSyncConfig: () -> Unit = {},
     onUpdateDevice: (DeviceConfig) -> Unit = {},
+    onRequireBiometric: ((title: String, subtitle: String, onAuthorized: () -> Unit) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
+    var selectedTab by remember { mutableStateOf("CONTROL") }
     var pendingAction by remember { mutableStateOf<TriggerAction?>(null) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var showEditDialog by remember { mutableStateOf(false) }
     var showMenu by remember { mutableStateOf(false) }
+
+    // If Dashboard mode is selected, render full-screen interactive dashboard
+    if (selectedTab == "DASHBOARD") {
+        DashboardScreen(
+            device = device,
+            nodeStatus = nodeStatus,
+            onBack = { selectedTab = "CONTROL" },
+            onTriggerPowerAction = onTrigger,
+            onRequireBiometric = onRequireBiometric,
+            modifier = modifier
+        )
+        return
+    }
 
     if (showEditDialog) {
         var editName by remember { mutableStateOf(device.name) }
         var editNode by remember { mutableStateOf(device.node) }
         var editR2Url by remember { mutableStateOf(device.r2Url) }
         var editSecretKey by remember { mutableStateOf(device.secretKey) }
+        var editSyspulseUrl by remember { mutableStateOf(device.syspulseUrl) }
+        var editSyspulseSecret by remember { mutableStateOf(device.syspulseSecretKey) }
         var showKey by remember { mutableStateOf(false) }
 
         val editFieldColors = OutlinedTextFieldDefaults.colors(
@@ -192,6 +215,24 @@ fun DevicePage(
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.fillMaxWidth()
                     )
+                    OutlinedTextField(
+                        value = editSyspulseUrl,
+                        onValueChange = { editSyspulseUrl = it },
+                        label = { Text("SysPulse API URL (e.g. http://100.85.63.44:8088)") },
+                        singleLine = true,
+                        colors = editFieldColors,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = editSyspulseSecret,
+                        onValueChange = { editSyspulseSecret = it },
+                        label = { Text("SysPulse Secret Key (optional override)") },
+                        singleLine = true,
+                        colors = editFieldColors,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    )
                 }
             },
             confirmButton = {
@@ -202,7 +243,9 @@ fun DevicePage(
                             name = editName.trim().ifBlank { device.name },
                             node = editNode.trim().ifBlank { device.node },
                             r2Url = editR2Url.trim(),
-                            secretKey = editSecretKey.trim()
+                            secretKey = editSecretKey.trim(),
+                            syspulseUrl = editSyspulseUrl.trim(),
+                            syspulseSecretKey = editSyspulseSecret.trim()
                         )
                         onUpdateDevice(updated)
                     },
@@ -273,6 +316,21 @@ fun DevicePage(
 
     val isOnline = nodeStatus?.isOnline
     val scrollState = rememberScrollState()
+
+    var glanceStatus by remember { mutableStateOf<SysPulseStatus?>(null) }
+    var glanceLoading by remember { mutableStateOf(false) }
+
+    LaunchedEffect(device.id, isOnline) {
+        if (isOnline == true) {
+            glanceLoading = true
+            SysPulseClient.shared.fetchStatus(device, nodeStatus) { res ->
+                if (res.isSuccess) {
+                    glanceStatus = res.getOrNull()
+                }
+                glanceLoading = false
+            }
+        }
+    }
 
     Column(
         modifier = modifier
@@ -580,6 +638,180 @@ fun DevicePage(
             }
         }
 
+        // ── MODE SELECTOR (CONTROL vs DASHBOARD) ─────────────────────────
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(14.dp))
+                .background(BgElevated)
+                .border(1.dp, BorderSubtle, RoundedCornerShape(14.dp))
+                .padding(4.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            val isControl = selectedTab == "CONTROL"
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(if (isControl) BgSurface else Color.Transparent)
+                    .then(if (isControl) Modifier.border(1.dp, BorderDefault, RoundedCornerShape(10.dp)) else Modifier)
+                    .clickable { selectedTab = "CONTROL" }
+                    .padding(vertical = 10.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Icon(
+                        Icons.Default.PowerSettingsNew,
+                        contentDescription = null,
+                        tint = if (isControl) RedVibrant else TextMuted,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Text(
+                        "Power Control",
+                        fontSize = 13.sp,
+                        fontWeight = if (isControl) FontWeight.Bold else FontWeight.Medium,
+                        color = if (isControl) TextPrimary else TextSecondary
+                    )
+                }
+            }
+
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(if (!isControl) BgSurface else Color.Transparent)
+                    .then(if (!isControl) Modifier.border(1.dp, BorderDefault, RoundedCornerShape(10.dp)) else Modifier)
+                    .clickable { selectedTab = "DASHBOARD" }
+                    .padding(vertical = 10.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Icon(
+                        Icons.Default.Speed,
+                        contentDescription = null,
+                        tint = if (!isControl) GreenVibrant else TextMuted,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Text(
+                        "SysPulse",
+                        fontSize = 13.sp,
+                        fontWeight = if (!isControl) FontWeight.Bold else FontWeight.Medium,
+                        color = if (!isControl) TextPrimary else TextSecondary
+                    )
+                }
+            }
+        }
+
+        // ── LIVE TELEMETRY GLANCE CARD ───────────────────────────────────
+        if (isOnline == true) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(BgElevated)
+                    .border(1.dp, BorderSubtle, RoundedCornerShape(16.dp))
+                    .clickable { selectedTab = "DASHBOARD" }
+                    .padding(14.dp)
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.Speed,
+                                contentDescription = null,
+                                tint = GreenVibrant,
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Text(
+                                "Live Telemetry",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = TextPrimary,
+                                letterSpacing = 0.5.sp
+                            )
+                        }
+                        Text(
+                            "Full Dashboard ➔",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = GreenVibrant
+                        )
+                    }
+
+                    if (glanceLoading && glanceStatus == null) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(12.dp),
+                                strokeWidth = 1.5.dp,
+                                color = GreenVibrant
+                            )
+                            Text("Connecting to SysPulse daemon...", fontSize = 12.sp, color = TextMuted)
+                        }
+                    } else if (glanceStatus != null) {
+                        val st = glanceStatus!!
+                        val cpuPct = st.cpu.pct
+                        val ramPct = st.ram.pct
+                        val rootDisk = st.disk.find { it.mount == "/" }
+                        val diskPct = rootDisk?.pct ?: 0.0
+                        val runningServices = st.services.count { it.active }
+                        val totalServices = st.services.size
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            MiniMetricChip(
+                                label = "CPU",
+                                value = "%.1f%%".format(cpuPct),
+                                color = if (cpuPct > 80) RedVibrant else if (cpuPct > 50) AmberVibrant else GreenVibrant,
+                                modifier = Modifier.weight(1f)
+                            )
+                            MiniMetricChip(
+                                label = "RAM",
+                                value = "%.0f%%".format(ramPct),
+                                color = if (ramPct > 85) RedVibrant else if (ramPct > 65) AmberVibrant else GreenVibrant,
+                                modifier = Modifier.weight(1f)
+                            )
+                            MiniMetricChip(
+                                label = "DISK",
+                                value = "%.0f%%".format(diskPct),
+                                color = if (diskPct > 90) RedVibrant else AmberVibrant,
+                                modifier = Modifier.weight(1f)
+                            )
+                            MiniMetricChip(
+                                label = "SVCS",
+                                value = "$runningServices/$totalServices",
+                                color = GreenVibrant,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    } else {
+                        Text(
+                            "Tap to open hardware monitor & service controls",
+                            fontSize = 12.sp,
+                            color = TextMuted
+                        )
+                    }
+                }
+            }
+        }
+
         // ── ACTION RESULT BANNER ─────────────────────────────────────────
         StatusBanner(
             status = lastStatus,
@@ -593,10 +825,8 @@ fun DevicePage(
         val isPowerOffEnabled = isOnline != false && !isLoading
 
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f),
-            verticalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterVertically)
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             HugeActionButton(
                 text = "Power On",
@@ -631,5 +861,28 @@ fun DevicePage(
         }
 
         Spacer(modifier = Modifier.height(4.dp))
+    }
+}
+
+@Composable
+private fun MiniMetricChip(
+    label: String,
+    value: String,
+    color: Color,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(10.dp))
+            .background(BgSurface)
+            .border(1.dp, BorderSubtle, RoundedCornerShape(10.dp))
+            .padding(vertical = 8.dp, horizontal = 6.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(label, fontSize = 9.sp, fontWeight = FontWeight.Bold, color = TextMuted, letterSpacing = 0.5.sp)
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(value, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = color)
+        }
     }
 }

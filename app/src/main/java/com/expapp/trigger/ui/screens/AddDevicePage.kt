@@ -222,14 +222,16 @@ fun AddDevicePage(
                     isFetching = false
                     result.onSuccess { ep ->
                         val dev = DeviceConfig(
-                            name       = deviceName.trim(),
-                            node       = nodeName.trim().ifBlank { "debian" },
-                            secretKey  = secretKey.trim(),
-                            r2Url      = r2Url.trim(),
-                            powerOnUrl = ep.powerOn,
-                            powerOffUrl= ep.powerOff,
-                            rebootUrl  = ep.reboot,
-                            statusUrl  = ep.status
+                            name        = deviceName.trim(),
+                            node        = nodeName.trim().ifBlank { "debian" },
+                            secretKey   = secretKey.trim(),
+                            r2Url       = r2Url.trim(),
+                            powerOnUrl  = ep.powerOn,
+                            powerOffUrl = ep.powerOff,
+                            rebootUrl   = ep.reboot,
+                            statusUrl   = ep.status,
+                            syspulseUrl = ep.syspulse,
+                            syspulseSecretKey = ep.syspulseSecret
                         )
                         onDeviceAdded(dev)
                         successMsg = "\"${dev.name}\" added successfully"
