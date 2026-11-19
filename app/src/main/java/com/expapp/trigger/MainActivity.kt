@@ -39,6 +39,7 @@ import com.expapp.trigger.ui.theme.DarkBackground
 import com.expapp.trigger.ui.theme.ExpAppTheme
 import com.expapp.trigger.widget.ServerWidgetProvider
 import com.expapp.trigger.worker.ActionTriggerWorker
+import com.expapp.trigger.worker.AppUpdateWorker
 import com.expapp.trigger.worker.NotificationHelper
 import com.expapp.trigger.worker.ServerMonitorWorker
 
@@ -62,6 +63,7 @@ class MainActivity : FragmentActivity() {
                 NotificationHelper.createNotificationChannel(this)
                 if (appSettings.isBackgroundMonitoringEnabled) {
                     ServerMonitorWorker.schedule(this)
+                    AppUpdateWorker.schedule(this)
                 }
                 onNotificationPermissionGrantedCallback?.invoke()
             } else {
@@ -127,9 +129,10 @@ class MainActivity : FragmentActivity() {
             }
         }
 
-        // Initialize background server monitoring
+        // Initialize background server monitoring & update checks
         if (appSettings.isBackgroundMonitoringEnabled) {
             ServerMonitorWorker.schedule(this)
+            AppUpdateWorker.schedule(this)
         }
 
         // Handle initial launch intent (from NFC or Widget)
@@ -195,10 +198,12 @@ class MainActivity : FragmentActivity() {
 
     override fun onStop() {
         super.onStop()
-        // When leaving the app, trigger an immediate one-time check & ensure worker is scheduled
+        // When leaving the app, trigger an immediate one-time check & ensure workers are scheduled
         if (appSettings.isBackgroundMonitoringEnabled) {
             ServerMonitorWorker.runOnce(this)
             ServerMonitorWorker.schedule(this)
+            AppUpdateWorker.runOnce(this)
+            AppUpdateWorker.schedule(this)
         }
     }
 

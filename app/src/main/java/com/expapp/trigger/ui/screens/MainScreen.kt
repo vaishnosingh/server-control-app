@@ -93,6 +93,7 @@ import com.expapp.trigger.update.UpdateCheckResult
 import com.expapp.trigger.update.UpdateManager
 import com.expapp.trigger.widget.ServerWidgetProvider
 import com.expapp.trigger.worker.ActionTriggerWorker
+import com.expapp.trigger.worker.AppUpdateWorker
 import com.expapp.trigger.worker.ServerMonitorWorker
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -212,8 +213,14 @@ fun MainScreen(
                     showUpdateDialog = true
                     val newVer = result.info.versionName
                     if (appSettings.lastNotifiedUpdateVersion != newVer) {
-                        appSettings.lastNotifiedUpdateVersion = newVer
-                        com.expapp.trigger.worker.NotificationHelper.sendUpdateAvailableNotification(context, newVer)
+                        val notified = com.expapp.trigger.worker.NotificationHelper.sendUpdateAvailableNotification(
+                            context = context,
+                            newVersion = newVer,
+                            releaseTitle = result.info.title
+                        )
+                        if (notified) {
+                            appSettings.lastNotifiedUpdateVersion = newVer
+                        }
                     }
                     if (isManual) {
                         Toast.makeText(context, "New update available: v${result.info.versionName}!", Toast.LENGTH_SHORT).show()
@@ -569,8 +576,10 @@ fun MainScreen(
                 appSettings.isBackgroundMonitoringEnabled = enabled
                 if (enabled) {
                     ServerMonitorWorker.schedule(context)
+                    AppUpdateWorker.schedule(context)
                 } else {
                     ServerMonitorWorker.cancel(context)
+                    AppUpdateWorker.cancel(context)
                 }
             },
             isBiometricAvailable = BiometricHelper.isBiometricAvailable(context),

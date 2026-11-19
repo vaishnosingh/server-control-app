@@ -142,8 +142,14 @@ class ServerMonitorWorker(
                 val newVer = result.info.versionName
                 val lastNotified = appSettings.lastNotifiedUpdateVersion
                 if (lastNotified != newVer) {
-                    appSettings.lastNotifiedUpdateVersion = newVer
-                    NotificationHelper.sendUpdateAvailableNotification(appContext, newVer)
+                    val notified = NotificationHelper.sendUpdateAvailableNotification(
+                        context = appContext,
+                        newVersion = newVer,
+                        releaseTitle = result.info.title
+                    )
+                    if (notified) {
+                        appSettings.lastNotifiedUpdateVersion = newVer
+                    }
                 }
             }
         } catch (_: Exception) {

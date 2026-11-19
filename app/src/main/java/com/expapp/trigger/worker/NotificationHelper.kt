@@ -85,11 +85,20 @@ object NotificationHelper {
         }
     }
 
-    fun sendUpdateAvailableNotification(context: Context, newVersion: String): Boolean {
+    fun sendUpdateAvailableNotification(
+        context: Context,
+        newVersion: String,
+        releaseTitle: String? = null
+    ): Boolean {
+        val title = if (!releaseTitle.isNullOrBlank() && releaseTitle != "v$newVersion") {
+            "🚀 Update Available: $releaseTitle"
+        } else {
+            "🚀 Update Available: v$newVersion"
+        }
         return sendNotification(
             context = context,
             id = 8888,
-            title = "🚀 Update Available: v$newVersion",
+            title = title,
             message = "A new version (v$newVersion) of Device Trigger is ready to install. Tap to update!",
             isSuccess = true,
             extraAction = "open_update"
