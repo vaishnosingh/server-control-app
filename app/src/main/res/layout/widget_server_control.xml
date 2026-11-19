@@ -5,7 +5,7 @@
     android:layout_height="match_parent"
     android:background="@drawable/widget_bg"
     android:orientation="vertical"
-    android:padding="12dp">
+    android:padding="13dp">
 
     <!-- Header Row -->
     <LinearLayout
@@ -14,17 +14,27 @@
         android:gravity="center_vertical"
         android:orientation="horizontal">
 
-        <ImageView
-            android:layout_width="18dp"
-            android:layout_height="18dp"
-            android:src="@drawable/widget_ic_terminal"
-            android:contentDescription="Server" />
+        <!-- App Launcher Icon Badge (Explicit App Launch only if user taps this badge) -->
+        <FrameLayout
+            android:id="@+id/widget_app_icon_badge"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:background="@drawable/widget_icon_badge">
 
+            <ImageView
+                android:layout_width="16dp"
+                android:layout_height="16dp"
+                android:layout_gravity="center"
+                android:src="@drawable/widget_ic_terminal"
+                android:contentDescription="Server App" />
+        </FrameLayout>
+
+        <!-- Device & Node Info (Tapping this refreshes status, does NOT open app) -->
         <LinearLayout
-            android:id="@+id/widget_header_clickable"
+            android:id="@+id/widget_header_info"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_marginStart="8dp"
+            android:layout_marginStart="9dp"
             android:layout_marginEnd="6dp"
             android:layout_weight="1"
             android:orientation="vertical">
@@ -47,58 +57,70 @@
                 android:ellipsize="end"
                 android:maxLines="1"
                 android:text="debian"
-                android:textColor="#71717a"
+                android:textColor="#9ca3af"
                 android:textSize="11sp" />
         </LinearLayout>
 
-        <!-- Status Dot + Text -->
+        <!-- Status Chip Badge -->
         <LinearLayout
+            android:id="@+id/widget_status_chip"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:background="@drawable/widget_chip_checking"
             android:gravity="center_vertical"
             android:orientation="horizontal"
-            android:paddingEnd="6dp">
+            android:paddingStart="7dp"
+            android:paddingTop="3dp"
+            android:paddingEnd="7dp"
+            android:paddingBottom="3dp">
 
             <ImageView
                 android:id="@+id/widget_status_dot"
-                android:layout_width="8dp"
-                android:layout_height="8dp"
+                android:layout_width="6dp"
+                android:layout_height="6dp"
                 android:src="@drawable/widget_dot_gray"
-                android:contentDescription="Status" />
+                android:contentDescription="Status Dot" />
 
             <TextView
                 android:id="@+id/widget_status_text"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="5dp"
+                android:layout_marginStart="4dp"
                 android:text="CHECKING"
-                android:textColor="#71717a"
-                android:textSize="11sp"
+                android:textColor="#9ca3af"
+                android:textSize="10sp"
                 android:textStyle="bold" />
         </LinearLayout>
 
-        <!-- Refresh Button -->
-        <ImageView
+        <!-- Refresh Button Container (Large 32x32dp touch target) -->
+        <FrameLayout
             android:id="@+id/widget_btn_refresh"
-            android:layout_width="26dp"
-            android:layout_height="26dp"
-            android:contentDescription="Refresh"
-            android:padding="3dp"
-            android:src="@drawable/widget_ic_refresh" />
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:layout_marginStart="6dp"
+            android:background="@drawable/widget_btn_refresh_bg">
+
+            <ImageView
+                android:layout_width="16dp"
+                android:layout_height="16dp"
+                android:layout_gravity="center"
+                android:src="@drawable/widget_ic_refresh"
+                android:contentDescription="Refresh" />
+        </FrameLayout>
     </LinearLayout>
 
-    <!-- Spacer / Divider (FrameLayout is explicitly whitelisted in RemoteViews) -->
+    <!-- Sleek Horizontal Divider -->
     <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="1dp"
-        android:layout_marginTop="8dp"
-        android:layout_marginBottom="8dp"
-        android:background="#27272a" />
+        android:layout_marginTop="9dp"
+        android:layout_marginBottom="9dp"
+        android:background="#222228" />
 
     <!-- Action Buttons Row -->
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="38dp"
+        android:layout_height="40dp"
         android:gravity="center"
         android:orientation="horizontal">
 
@@ -106,12 +128,12 @@
             android:id="@+id/widget_btn_power_on"
             android:layout_width="0dp"
             android:layout_height="match_parent"
-            android:layout_marginEnd="4dp"
+            android:layout_marginEnd="3dp"
             android:layout_weight="1"
             android:background="@drawable/widget_btn_green"
             android:gravity="center"
-            android:text="POWER ON"
-            android:textColor="#22c55e"
+            android:text="⚡ POWER ON"
+            android:textColor="#4ade80"
             android:textSize="11sp"
             android:textStyle="bold" />
 
@@ -124,8 +146,8 @@
             android:layout_weight="1"
             android:background="@drawable/widget_btn_amber"
             android:gravity="center"
-            android:text="REBOOT"
-            android:textColor="#f59e0b"
+            android:text="🔄 REBOOT"
+            android:textColor="#fbbf24"
             android:textSize="11sp"
             android:textStyle="bold" />
 
@@ -133,12 +155,12 @@
             android:id="@+id/widget_btn_power_off"
             android:layout_width="0dp"
             android:layout_height="match_parent"
-            android:layout_marginStart="4dp"
+            android:layout_marginStart="3dp"
             android:layout_weight="1"
             android:background="@drawable/widget_btn_red"
             android:gravity="center"
-            android:text="OFF"
-            android:textColor="#ef4444"
+            android:text="🛑 OFF"
+            android:textColor="#f87171"
             android:textSize="11sp"
             android:textStyle="bold" />
     </LinearLayout>
@@ -148,9 +170,11 @@
         android:id="@+id/widget_footer_text"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="6dp"
+        android:layout_marginTop="7dp"
+        android:ellipsize="end"
         android:gravity="center"
-        android:text="Tap header to open app • Tap action to trigger"
-        android:textColor="#52525b"
+        android:maxLines="1"
+        android:text="Checking server status..."
+        android:textColor="#71717a"
         android:textSize="10sp" />
 </LinearLayout>

@@ -151,6 +151,7 @@ fun MainScreen(
     var showNfcWriteDialog by remember { mutableStateOf(false) }
     var historyLogs by remember { mutableStateOf(historyRepository.getLogs()) }
     var isBiometricEnabled by remember { mutableStateOf(appSettings.isBiometricEnabled) }
+    var isWidgetBiometricEnabled by remember { mutableStateOf(appSettings.isWidgetBiometricEnabled) }
     var isBgMonitorEnabled by remember { mutableStateOf(appSettings.isBackgroundMonitoringEnabled) }
 
     val loadingStates     = remember { mutableStateMapOf<String, Boolean>() }
@@ -569,6 +570,11 @@ fun MainScreen(
             onBiometricToggled = { enabled ->
                 isBiometricEnabled = enabled
                 appSettings.isBiometricEnabled = enabled
+            },
+            isWidgetBiometricEnabled = isWidgetBiometricEnabled,
+            onWidgetBiometricToggled = { enabled ->
+                isWidgetBiometricEnabled = enabled
+                appSettings.isWidgetBiometricEnabled = enabled
             },
             isBgMonitorEnabled = isBgMonitorEnabled,
             onBgMonitorToggled = { enabled ->

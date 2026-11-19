@@ -37,6 +37,7 @@ class AppSettingsTest {
     fun defaultValues_areTrue() {
         assertTrue(settings.isBiometricEnabled)
         assertTrue(settings.isBackgroundMonitoringEnabled)
+        assertFalse(settings.isWidgetBiometricEnabled)
     }
 
     @Test
@@ -46,6 +47,9 @@ class AppSettingsTest {
 
         settings.isBackgroundMonitoringEnabled = false
         assertFalse(settings.isBackgroundMonitoringEnabled)
+
+        settings.isWidgetBiometricEnabled = true
+        assertTrue(settings.isWidgetBiometricEnabled)
     }
 
     @Test

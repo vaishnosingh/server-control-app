@@ -60,6 +60,15 @@
             android:name=".update.InstallStatusReceiver"
             android:exported="false" />
 
+        <!-- Transparent Widget Biometric Auth Activity (Floating Prompt on Launcher) -->
+        <activity
+            android:name=".widget.WidgetAuthActivity"
+            android:exported="false"
+            android:theme="@style/Theme.WidgetAuth"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:launchMode="singleInstance" />
+
         <!-- Home Screen Widget -->
         <receiver
             android:name=".widget.ServerWidgetProvider"

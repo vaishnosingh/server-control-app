@@ -272,6 +272,9 @@ class MainActivity : FragmentActivity() {
             vibrateFeedback(true)
             Toast.makeText(this, "Sending $actionName signal to ${device.name}...", Toast.LENGTH_SHORT).show()
             ActionTriggerWorker.enqueue(this, device.id, action, source)
+            if (source == "Widget") {
+                finish()
+            }
         }
 
         if (appSettings.isBiometricEnabled && BiometricHelper.isBiometricAvailable(this)) {
@@ -282,8 +285,13 @@ class MainActivity : FragmentActivity() {
             ) { success, errorMsg ->
                 if (success) {
                     onAuthorized()
-                } else if (errorMsg != null) {
-                    Toast.makeText(this, "Authentication cancelled", Toast.LENGTH_SHORT).show()
+                } else {
+                    if (errorMsg != null) {
+                        Toast.makeText(this, "Authentication cancelled", Toast.LENGTH_SHORT).show()
+                    }
+                    if (source == "Widget") {
+                        finish()
+                    }
                 }
             }
         } else {

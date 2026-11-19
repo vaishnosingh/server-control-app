@@ -60,6 +60,8 @@ import com.expapp.trigger.ui.theme.TextSecondary
 fun SettingsDialog(
     isBiometricEnabled: Boolean,
     onBiometricToggled: (Boolean) -> Unit,
+    isWidgetBiometricEnabled: Boolean = false,
+    onWidgetBiometricToggled: (Boolean) -> Unit = {},
     isBgMonitorEnabled: Boolean,
     onBgMonitorToggled: (Boolean) -> Unit,
     isBiometricAvailable: Boolean,
@@ -162,6 +164,59 @@ fun SettingsDialog(
                                 uncheckedTrackColor = BgElevated
                             )
                         )
+                    }
+                }
+
+                // Widget Biometric Setting (Optional)
+                if (isBiometricEnabled && isBiometricAvailable) {
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(BgCard)
+                            .border(1.dp, BorderSubtle, RoundedCornerShape(14.dp))
+                            .padding(14.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Default.Fingerprint,
+                                contentDescription = null,
+                                tint = if (isWidgetBiometricEnabled) GreenVibrant else TextMuted,
+                                modifier = Modifier.size(28.dp)
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    "Widget Biometric Prompt",
+                                    color = TextPrimary,
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    if (isWidgetBiometricEnabled)
+                                        "Fingerprint overlay required before widget actions"
+                                    else
+                                        "1-tap instant action from home screen (no prompt)",
+                                    color = TextMuted,
+                                    fontSize = 11.sp
+                                )
+                            }
+                            Switch(
+                                checked = isWidgetBiometricEnabled,
+                                onCheckedChange = { onWidgetBiometricToggled(it) },
+                                colors = SwitchDefaults.colors(
+                                    checkedThumbColor = GreenVibrant,
+                                    checkedTrackColor = GreenVibrant.copy(alpha = 0.3f),
+                                    uncheckedThumbColor = TextMuted,
+                                    uncheckedTrackColor = BgElevated
+                                )
+                            )
+                        }
                     }
                 }
 
