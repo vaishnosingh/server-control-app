@@ -57,22 +57,34 @@ class ServerWidgetProvider : AppWidgetProvider() {
         appWidgetManager: AppWidgetManager,
         appWidgetIds: IntArray
     ) {
-        val repository = DeviceRepository(SharedPrefsStorage(context))
-        val devices = repository.getDevices()
+        try {
+            val repository = DeviceRepository(SharedPrefsStorage(context))
+            val devices = repository.getDevices()
 
-        for (appWidgetId in appWidgetIds) {
-            val device = devices.firstOrNull()
-            renderWidget(context, appWidgetManager, appWidgetId, device, null)
+            for (appWidgetId in appWidgetIds) {
+                val device = devices.firstOrNull()
+                renderWidget(context, appWidgetManager, appWidgetId, device, null)
 
-            // If device exists, fetch live status asynchronously
-            if (device != null && device.statusUrl.isNotBlank()) {
-                executor.execute {
-                    val status = TriggerClient().checkStatusSync(device)
-                    mainHandler.post {
-                        renderWidget(context, appWidgetManager, appWidgetId, device, status)
+                // If device exists, fetch live status asynchronously
+                if (device != null && device.statusUrl.isNotBlank()) {
+                    executor.execute {
+                        try {
+                            val status = TriggerClient().checkStatusSync(device)
+                            mainHandler.post {
+                                try {
+                                    renderWidget(context, appWidgetManager, appWidgetId, device, status)
+                                } catch (e: Exception) {
+                                    e.printStackTrace()
+                                }
+                            }
+                        } catch (e: Exception) {
+                            e.printStackTrace()
+                        }
                     }
                 }
             }
+        } catch (e: Exception) {
+            e.printStackTrace()
         }
     }
 
@@ -131,92 +143,96 @@ class ServerWidgetProvider : AppWidgetProvider() {
         status: NodeStatus?,
         footerOverride: String? = null
     ) {
-        val views = RemoteViews(context.packageName, R.layout.widget_server_control)
+        try {
+            val views = RemoteViews(context.packageName, R.layout.widget_server_control)
 
-        if (device == null) {
-            views.setTextViewText(R.id.widget_device_name, "No Device")
-            views.setTextViewText(R.id.widget_node_name, "Configure in app")
-            views.setTextViewText(R.id.widget_status_text, "OFFLINE")
-            views.setImageViewResource(R.id.widget_status_dot, R.drawable.widget_dot_gray)
-            views.setTextViewText(R.id.widget_footer_text, "Open app to add server")
+            if (device == null) {
+                views.setTextViewText(R.id.widget_device_name, "No Device")
+                views.setTextViewText(R.id.widget_node_name, "Configure in app")
+                views.setTextViewText(R.id.widget_status_text, "OFFLINE")
+                views.setImageViewResource(R.id.widget_status_dot, R.drawable.widget_dot_gray)
+                views.setTextViewText(R.id.widget_footer_text, "Open app to add server")
 
-            val appIntent = Intent(context, MainActivity::class.java)
-            val pendingApp = PendingIntent.getActivity(
-                context, 0, appIntent,
+                val appIntent = Intent(context, MainActivity::class.java)
+                val pendingApp = PendingIntent.getActivity(
+                    context, 0, appIntent,
+                    PendingIntent.FLAG_UPDATE_CURRENT or (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0)
+                )
+                views.setOnClickPendingIntent(R.id.widget_header_clickable, pendingApp)
+                views.setOnClickPendingIntent(R.id.widget_root, pendingApp)
+                appWidgetManager.updateAppWidget(appWidgetId, views)
+                return
+            }
+
+            views.setTextViewText(R.id.widget_device_name, device.name)
+            views.setTextViewText(R.id.widget_node_name, device.node)
+
+            // Status display
+            if (status == null) {
+                views.setTextViewText(R.id.widget_status_text, "SYNCING")
+                views.setTextColor(R.id.widget_status_text, 0xFF71717A.toInt())
+                views.setImageViewResource(R.id.widget_status_dot, R.drawable.widget_dot_gray)
+            } else if (status.isOnline) {
+                views.setTextViewText(R.id.widget_status_text, "ONLINE")
+                views.setTextColor(R.id.widget_status_text, 0xFF22C55E.toInt())
+                views.setImageViewResource(R.id.widget_status_dot, R.drawable.widget_dot_green)
+            } else {
+                views.setTextViewText(R.id.widget_status_text, "OFFLINE")
+                views.setTextColor(R.id.widget_status_text, 0xFFEF4444.toInt())
+                views.setImageViewResource(R.id.widget_status_dot, R.drawable.widget_dot_red)
+            }
+
+            views.setTextViewText(
+                R.id.widget_footer_text,
+                footerOverride ?: (if (status?.uptime != null) "Up: ${status.uptime}" else "Tap header to open • Tap button to trigger")
+            )
+
+            // Header click -> Open app
+            val openAppIntent = Intent(context, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            }
+            val pendingOpenApp = PendingIntent.getActivity(
+                context,
+                appWidgetId * 10,
+                openAppIntent,
                 PendingIntent.FLAG_UPDATE_CURRENT or (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0)
             )
-            views.setOnClickPendingIntent(R.id.widget_header_clickable, pendingApp)
-            views.setOnClickPendingIntent(R.id.widget_root, pendingApp)
+            views.setOnClickPendingIntent(R.id.widget_header_clickable, pendingOpenApp)
+
+            // Refresh click
+            val refreshIntent = Intent(context, ServerWidgetProvider::class.java).apply {
+                action = ACTION_REFRESH
+            }
+            val pendingRefresh = PendingIntent.getBroadcast(
+                context,
+                appWidgetId * 10 + 1,
+                refreshIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0)
+            )
+            views.setOnClickPendingIntent(R.id.widget_btn_refresh, pendingRefresh)
+
+            // Power On click
+            views.setOnClickPendingIntent(
+                R.id.widget_btn_power_on,
+                createTriggerPendingIntent(context, appWidgetId * 10 + 2, device.id, TriggerAction.POWER_ON)
+            )
+
+            // Reboot click
+            views.setOnClickPendingIntent(
+                R.id.widget_btn_reboot,
+                createTriggerPendingIntent(context, appWidgetId * 10 + 3, device.id, TriggerAction.REBOOT)
+            )
+
+            // Power Off click
+            views.setOnClickPendingIntent(
+                R.id.widget_btn_power_off,
+                createTriggerPendingIntent(context, appWidgetId * 10 + 4, device.id, TriggerAction.POWER_OFF)
+            )
+
             appWidgetManager.updateAppWidget(appWidgetId, views)
-            return
+        } catch (e: Exception) {
+            e.printStackTrace()
         }
-
-        views.setTextViewText(R.id.widget_device_name, device.name)
-        views.setTextViewText(R.id.widget_node_name, device.node)
-
-        // Status display
-        if (status == null) {
-            views.setTextViewText(R.id.widget_status_text, "SYNCING")
-            views.setTextColor(R.id.widget_status_text, 0xFF71717A.toInt())
-            views.setImageViewResource(R.id.widget_status_dot, R.drawable.widget_dot_gray)
-        } else if (status.isOnline) {
-            views.setTextViewText(R.id.widget_status_text, "ONLINE")
-            views.setTextColor(R.id.widget_status_text, 0xFF22C55E.toInt())
-            views.setImageViewResource(R.id.widget_status_dot, R.drawable.widget_dot_green)
-        } else {
-            views.setTextViewText(R.id.widget_status_text, "OFFLINE")
-            views.setTextColor(R.id.widget_status_text, 0xFFEF4444.toInt())
-            views.setImageViewResource(R.id.widget_status_dot, R.drawable.widget_dot_red)
-        }
-
-        views.setTextViewText(
-            R.id.widget_footer_text,
-            footerOverride ?: (if (status?.uptime != null) "Up: ${status.uptime}" else "Tap header to open • Tap button to trigger")
-        )
-
-        // Header click -> Open app
-        val openAppIntent = Intent(context, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-        }
-        val pendingOpenApp = PendingIntent.getActivity(
-            context,
-            appWidgetId * 10,
-            openAppIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0)
-        )
-        views.setOnClickPendingIntent(R.id.widget_header_clickable, pendingOpenApp)
-
-        // Refresh click
-        val refreshIntent = Intent(context, ServerWidgetProvider::class.java).apply {
-            action = ACTION_REFRESH
-        }
-        val pendingRefresh = PendingIntent.getBroadcast(
-            context,
-            appWidgetId * 10 + 1,
-            refreshIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0)
-        )
-        views.setOnClickPendingIntent(R.id.widget_btn_refresh, pendingRefresh)
-
-        // Power On click
-        views.setOnClickPendingIntent(
-            R.id.widget_btn_power_on,
-            createTriggerPendingIntent(context, appWidgetId * 10 + 2, device.id, TriggerAction.POWER_ON)
-        )
-
-        // Reboot click
-        views.setOnClickPendingIntent(
-            R.id.widget_btn_reboot,
-            createTriggerPendingIntent(context, appWidgetId * 10 + 3, device.id, TriggerAction.REBOOT)
-        )
-
-        // Power Off click
-        views.setOnClickPendingIntent(
-            R.id.widget_btn_power_off,
-            createTriggerPendingIntent(context, appWidgetId * 10 + 4, device.id, TriggerAction.POWER_OFF)
-        )
-
-        appWidgetManager.updateAppWidget(appWidgetId, views)
     }
 
     private fun createTriggerPendingIntent(

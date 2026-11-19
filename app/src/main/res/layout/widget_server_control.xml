@@ -17,7 +17,7 @@
         <ImageView
             android:layout_width="18dp"
             android:layout_height="18dp"
-            android:src="@drawable/ic_terminal"
+            android:src="@drawable/widget_ic_terminal"
             android:contentDescription="Server" />
 
         <LinearLayout
@@ -82,14 +82,13 @@
             android:id="@+id/widget_btn_refresh"
             android:layout_width="26dp"
             android:layout_height="26dp"
-            android:background="?android:attr/selectableItemBackgroundBorderless"
             android:contentDescription="Refresh"
             android:padding="3dp"
-            android:src="@drawable/ic_refresh" />
+            android:src="@drawable/widget_ic_refresh" />
     </LinearLayout>
 
-    <!-- Spacer / Divider -->
-    <View
+    <!-- Spacer / Divider (FrameLayout is explicitly whitelisted in RemoteViews) -->
+    <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="1dp"
         android:layout_marginTop="8dp"
