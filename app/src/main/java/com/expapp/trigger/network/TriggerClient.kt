@@ -198,7 +198,7 @@ class TriggerClient(
         client.newCall(request).enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {
                 runOnMain {
-                    callback(NodeStatus(isOnline = false, statusText = "OFFLINE"))
+                    callback(NodeStatus(isOnline = false, statusText = "OFFLINE", isReachable = false))
                 }
             }
 
@@ -215,7 +215,7 @@ class TriggerClient(
     fun checkStatusSync(device: DeviceConfig): NodeStatus {
         val baseStatusUrl = device.statusUrl.trim()
         if (baseStatusUrl.isBlank()) {
-            return NodeStatus(isOnline = false, statusText = "NO STATUS URL")
+            return NodeStatus(isOnline = false, statusText = "NO STATUS URL", isReachable = false)
         }
 
         return try {
@@ -226,7 +226,7 @@ class TriggerClient(
                 parseNodeStatus(body, it.isSuccessful)
             }
         } catch (e: Exception) {
-            NodeStatus(isOnline = false, statusText = "OFFLINE")
+            NodeStatus(isOnline = false, statusText = "OFFLINE", isReachable = false)
         }
     }
 

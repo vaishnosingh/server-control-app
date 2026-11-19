@@ -20,5 +20,6 @@ data class NodeStatus(
     val onSinceIst: String? = null,
     val lastActiveAgo: String? = null,
     val lastActiveIst: String? = null,
-    val timestamp: Long = System.currentTimeMillis()
+    val timestamp: Long = System.currentTimeMillis(),
+    val isReachable: Boolean = true
 )

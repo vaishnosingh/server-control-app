@@ -92,12 +92,19 @@ class ServerMonitorWorker(
             if (device.statusUrl.isBlank()) continue
 
             val status = triggerClient.checkStatusSync(device)
+            
+            // If the endpoint could not be reached (e.g. phone has no internet / network failure),
+            // do NOT treat this as the server going offline. Maintain the last known state.
+            if (!status.isReachable) {
+                continue
+            }
+
             val previousStatus = appSettings.getLastStatus(device.id)
 
             // Save new status
             appSettings.setLastStatus(device.id, status.isOnline)
 
-            // Determine if notification is needed
+            // Determine if notification is needed only when server actually transitions
             if (previousStatus != null && previousStatus != status.isOnline) {
                 NotificationHelper.sendNotification(
                     context = appContext,
@@ -106,18 +113,9 @@ class ServerMonitorWorker(
                     message = if (status.isOnline) {
                         "${device.name} is now online and reachable."
                     } else {
-                        "${device.name} is unreachable or offline."
+                        "${device.name} has powered off or is offline."
                     },
                     isSuccess = status.isOnline
-                )
-            } else if (previousStatus == null && !status.isOnline) {
-                // Initial check revealed server is offline
-                NotificationHelper.sendNotification(
-                    context = appContext,
-                    id = device.id.hashCode(),
-                    title = "⚠️ Server Offline",
-                    message = "${device.name} is currently unreachable or offline.",
-                    isSuccess = false
                 )
             }
         }

@@ -105,27 +105,6 @@ class ActionTriggerWorker(
             "Failed to send $actionTitle: $clean"
         }
 
-        val actionIcon = when (action) {
-            TriggerAction.POWER_ON  -> "⚡"
-            TriggerAction.POWER_OFF -> "🛑"
-            TriggerAction.REBOOT    -> "🔄"
-        }
-
-        val notifTitle = if (response.isSuccess) {
-            "$actionIcon $actionTitle: ${device.name}"
-        } else {
-            "❌ $actionTitle Failed: ${device.name}"
-        }
-
-        // Send system notification to drawer
-        NotificationHelper.sendNotification(
-            context = appContext,
-            id = (device.id.hashCode() * 31) + action.ordinal,
-            title = notifTitle,
-            message = signalMsg,
-            isSuccess = response.isSuccess
-        )
-
         // 3. Save to history log
         historyRepo.addLog(
             TriggerLog(
@@ -166,6 +145,12 @@ class ActionTriggerWorker(
         while (attempts < maxAttempts) {
             attempts++
             val status = triggerClient.checkStatusSync(device)
+
+            // If phone network is unavailable, do not misinterpret as server going offline
+            if (!status.isReachable) {
+                delay(4000L)
+                continue
+            }
 
             when (action) {
                 TriggerAction.POWER_ON -> {

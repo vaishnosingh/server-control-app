@@ -166,8 +166,10 @@ fun MainScreen(
         triggerClient.checkStatus(device) { status ->
             checkingStatusMap[device.id] = false
             nodeStatuses[device.id] = status
-            // Keep background monitoring synced with the latest live status
-            appSettings.setLastStatus(device.id, status.isOnline)
+            // Only update stored status when server is actually reached
+            if (status.isReachable) {
+                appSettings.setLastStatus(device.id, status.isOnline)
+            }
         }
     }
 
@@ -379,7 +381,7 @@ fun MainScreen(
                     if (availableUpdate != null) {
                         IconButton(
                             onClick = { showUpdateDialog = true },
-                            modifier = Modifier.size(36.dp)
+                            modifier = Modifier.size(32.dp)
                         ) {
                             Box(contentAlignment = Alignment.TopEnd) {
                                 Icon(
@@ -404,55 +406,55 @@ fun MainScreen(
                             historyLogs = historyRepository.getLogs()
                             showHistoryDialog = true
                         },
-                        modifier = Modifier.size(36.dp)
+                        modifier = Modifier.size(32.dp)
                     ) {
                         Icon(
                             Icons.Default.History,
                             contentDescription = "Trigger History",
                             tint = TextSecondary,
-                            modifier = Modifier.size(20.dp)
+                            modifier = Modifier.size(19.dp)
                         )
                     }
 
                     // Settings Button
                     IconButton(
                         onClick = { showSettingsDialog = true },
-                        modifier = Modifier.size(36.dp)
+                        modifier = Modifier.size(32.dp)
                     ) {
                         Icon(
                             Icons.Default.Settings,
                             contentDescription = "Settings",
                             tint = TextSecondary,
-                            modifier = Modifier.size(20.dp)
+                            modifier = Modifier.size(19.dp)
                         )
                     }
 
-                    // R2 Sync Button
+                    // Unified Refresh / Sync Button
                     IconButton(
-                        onClick = { syncEndpoints(true) },
-                        enabled = !isSyncing,
-                        modifier = Modifier.size(36.dp)
+                        onClick = { refreshWholePage() },
+                        enabled = !isSyncing && !isPullRefreshing,
+                        modifier = Modifier.size(32.dp)
                     ) {
                         Icon(
                             Icons.Default.Refresh,
-                            "Sync",
-                            tint = if (isSyncing) TextMuted else GreenVibrant,
+                            "Refresh all",
+                            tint = if (isSyncing || isPullRefreshing) TextMuted else GreenVibrant,
                             modifier = Modifier
-                                .size(20.dp)
-                                .rotate(rotationAngle)
+                                .size(19.dp)
+                                .rotate(if (isSyncing || isPullRefreshing) rotationAngle else 0f)
                         )
                     }
 
                     // Add Device Button
                     IconButton(
                         onClick = { coroutineScope.launch { pagerState.animateScrollToPage(devices.size) } },
-                        modifier = Modifier.size(36.dp)
+                        modifier = Modifier.size(32.dp)
                     ) {
                         Icon(
                             Icons.Default.Add,
                             "Add Device",
                             tint = GreenVibrant,
-                            modifier = Modifier.size(22.dp)
+                            modifier = Modifier.size(20.dp)
                         )
                     }
                 },

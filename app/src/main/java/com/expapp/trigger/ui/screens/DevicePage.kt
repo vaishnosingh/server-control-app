@@ -318,16 +318,16 @@ fun DevicePage(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 18.dp, vertical = 16.dp)
+                    .padding(horizontal = 16.dp, vertical = 14.dp)
             ) {
-                // Title row
+                // Top row: Server Icon + Name / Node (flexible) + Header Actions
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(44.dp)
+                            .size(42.dp)
                             .clip(RoundedCornerShape(12.dp))
                             .background(
                                 Brush.radialGradient(
@@ -368,12 +368,12 @@ fun DevicePage(
 
                     Column(
                         modifier = Modifier
-                            .weight(1f)
-                            .padding(end = 6.dp)
+                            .weight(1f, fill = true)
+                            .padding(end = 8.dp)
                     ) {
                         Text(
                             text = device.name,
-                            fontSize = 18.sp,
+                            fontSize = 17.sp,
                             fontWeight = FontWeight.Bold,
                             color = TextPrimary,
                             maxLines = 1,
@@ -391,25 +391,40 @@ fun DevicePage(
                         )
                     }
 
-                    // Action buttons in a fixed non-shrinking Row
+                    // Compact, non-overlapping button bar
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        // Re-fetch R2 JSON config button
+                        // Refresh button (syncs status & R2 endpoints)
                         IconButton(
-                            onClick = onSyncConfig,
+                            onClick = {
+                                if (!isCheckingStatus) {
+                                    onRefreshStatus()
+                                    onSyncConfig()
+                                }
+                            },
                             modifier = Modifier
                                 .size(34.dp)
                                 .clip(RoundedCornerShape(9.dp))
-                                .background(AmberVibrant.copy(alpha = 0.08f))
-                                .border(1.dp, AmberVibrant.copy(alpha = 0.2f), RoundedCornerShape(9.dp))
+                                .background(
+                                    if (isCheckingStatus) GreenVibrant.copy(alpha = 0.15f)
+                                    else BorderSubtle.copy(alpha = 0.25f)
+                                )
+                                .border(
+                                    1.dp,
+                                    if (isCheckingStatus) GreenVibrant.copy(alpha = 0.4f)
+                                    else BorderSubtle,
+                                    RoundedCornerShape(9.dp)
+                                )
                         ) {
                             Icon(
-                                imageVector = Icons.Default.CloudSync,
-                                contentDescription = "Re-fetch R2 JSON",
-                                tint = AmberVibrant,
-                                modifier = Modifier.size(17.dp)
+                                imageVector = Icons.Default.Refresh,
+                                contentDescription = "Refresh server",
+                                tint = if (isCheckingStatus) GreenVibrant else TextSecondary,
+                                modifier = Modifier
+                                    .size(17.dp)
+                                    .rotate(if (isCheckingStatus) spinAngle else 0f)
                             )
                         }
 
@@ -419,41 +434,14 @@ fun DevicePage(
                             modifier = Modifier
                                 .size(34.dp)
                                 .clip(RoundedCornerShape(9.dp))
-                                .background(BorderSubtle.copy(alpha = 0.3f))
+                                .background(BorderSubtle.copy(alpha = 0.25f))
                                 .border(1.dp, BorderSubtle, RoundedCornerShape(9.dp))
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Edit,
                                 contentDescription = "Edit device",
                                 tint = TextSecondary,
-                                modifier = Modifier.size(17.dp)
-                            )
-                        }
-
-                        // Refresh button (spins while checking)
-                        IconButton(
-                            onClick = { if (!isCheckingStatus) onRefreshStatus() },
-                            modifier = Modifier
-                                .size(34.dp)
-                                .clip(RoundedCornerShape(9.dp))
-                                .background(
-                                    if (isCheckingStatus) GreenVibrant.copy(alpha = 0.12f)
-                                    else BorderSubtle.copy(alpha = 0.3f)
-                                )
-                                .border(
-                                    1.dp,
-                                    if (isCheckingStatus) GreenVibrant.copy(alpha = 0.3f)
-                                    else BorderSubtle,
-                                    RoundedCornerShape(9.dp)
-                                )
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Refresh,
-                                contentDescription = "Refresh status",
-                                tint = if (isCheckingStatus) GreenVibrant else TextMuted,
-                                modifier = Modifier
-                                    .size(17.dp)
-                                    .rotate(if (isCheckingStatus) spinAngle else 0f)
+                                modifier = Modifier.size(16.dp)
                             )
                         }
 
@@ -464,19 +452,19 @@ fun DevicePage(
                                 .size(34.dp)
                                 .clip(RoundedCornerShape(9.dp))
                                 .background(RedVibrant.copy(alpha = 0.08f))
-                                .border(1.dp, RedVibrant.copy(alpha = 0.15f), RoundedCornerShape(9.dp))
+                                .border(1.dp, RedVibrant.copy(alpha = 0.2f), RoundedCornerShape(9.dp))
                         ) {
                             Icon(
                                 imageVector = Icons.Default.DeleteOutline,
                                 contentDescription = "Remove device",
-                                tint = RedVibrant.copy(alpha = 0.7f),
+                                tint = RedVibrant.copy(alpha = 0.8f),
                                 modifier = Modifier.size(17.dp)
                             )
                         }
                     }
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(14.dp))
 
                 // ── STATUS ROW ────────────────────────────────────────────
                 Row(
