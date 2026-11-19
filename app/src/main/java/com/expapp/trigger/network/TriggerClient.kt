@@ -181,7 +181,7 @@ class TriggerClient(
         val baseStatusUrl = device.statusUrl.trim()
         if (baseStatusUrl.isBlank()) {
             runOnMain {
-                callback(NodeStatus(isOnline = false, statusText = "NO STATUS URL"))
+                callback(NodeStatus(isOnline = false, statusText = "NO STATUS URL", isReachable = false))
             }
             return
         }
@@ -190,7 +190,7 @@ class TriggerClient(
             Request.Builder().url(baseStatusUrl).get().build()
         } catch (e: Exception) {
             runOnMain {
-                callback(NodeStatus(isOnline = false, statusText = "INVALID URL"))
+                callback(NodeStatus(isOnline = false, statusText = "INVALID URL", isReachable = false))
             }
             return
         }
@@ -205,7 +205,7 @@ class TriggerClient(
             override fun onResponse(call: Call, response: Response) {
                 val nodeStatus = response.use {
                     val body = it.body?.string().orEmpty().trim()
-                    parseNodeStatus(body, it.isSuccessful)
+                    parseNodeStatus(body, it.isSuccessful, device.node)
                 }
                 runOnMain { callback(nodeStatus) }
             }
@@ -223,17 +223,37 @@ class TriggerClient(
             val response = client.newCall(request).execute()
             response.use {
                 val body = it.body?.string().orEmpty().trim()
-                parseNodeStatus(body, it.isSuccessful)
+                parseNodeStatus(body, it.isSuccessful, device.node)
             }
         } catch (e: Exception) {
             NodeStatus(isOnline = false, statusText = "OFFLINE", isReachable = false)
         }
     }
 
-    private fun parseNodeStatus(body: String, isHttpSuccess: Boolean): NodeStatus {
+    private fun parseNodeStatus(body: String, isHttpSuccess: Boolean, targetNode: String = ""): NodeStatus {
         if (body.startsWith("{")) {
             return try {
-                val json = com.google.gson.JsonParser.parseString(body).asJsonObject
+                val rootJson = com.google.gson.JsonParser.parseString(body).asJsonObject
+
+                // Support both single-node JSON ({"node":"debian", "online":true, ...})
+                // and multi-node dashboard JSON ({"service":"Tailscale Sentinel", "nodes":{"debian":{...}, ...}})
+                val json = if (rootJson.has("nodes") && rootJson.get("nodes").isJsonObject) {
+                    val nodesObj = rootJson.getAsJsonObject("nodes")
+                    var matchedObj: com.google.gson.JsonObject? = null
+                    if (targetNode.isNotBlank()) {
+                        for (key in nodesObj.keySet()) {
+                            if (key.equals(targetNode, ignoreCase = true)) {
+                                matchedObj = nodesObj.getAsJsonObject(key)
+                                break
+                            }
+                        }
+                    }
+                    // If targetNode not matched or not provided, fallback to root or first entry
+                    matchedObj ?: if (nodesObj.size() > 0) nodesObj.entrySet().first().value.asJsonObject else rootJson
+                } else {
+                    rootJson
+                }
+
                 val online = when {
                     json.has("online") && json.get("online").isJsonPrimitive && json.get("online").asJsonPrimitive.isBoolean ->
                         json.get("online").asBoolean
@@ -264,16 +284,17 @@ class TriggerClient(
                     uptime = uptime,
                     onSinceIst = onSinceIst,
                     lastActiveAgo = lastActiveAgo,
-                    lastActiveIst = lastActiveIst
+                    lastActiveIst = lastActiveIst,
+                    isReachable = true
                 )
             } catch (e: Exception) {
-                NodeStatus(isOnline = false, statusText = "ERROR")
+                NodeStatus(isOnline = false, statusText = "ERROR", isReachable = true)
             }
         } else if (isHttpSuccess) {
             val isOnline = body.equals("ONLINE", ignoreCase = true)
-            return NodeStatus(isOnline = isOnline, statusText = if (isOnline) "ONLINE" else "OFFLINE")
+            return NodeStatus(isOnline = isOnline, statusText = if (isOnline) "ONLINE" else "OFFLINE", isReachable = true)
         } else {
-            return NodeStatus(isOnline = false, statusText = "OFFLINE")
+            return NodeStatus(isOnline = false, statusText = "OFFLINE", isReachable = false)
         }
     }
 }

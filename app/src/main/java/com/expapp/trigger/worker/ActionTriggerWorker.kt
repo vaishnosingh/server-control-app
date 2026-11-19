@@ -159,8 +159,8 @@ class ActionTriggerWorker(
                         NotificationHelper.sendNotification(
                             context = appContext,
                             id = device.id.hashCode(),
-                            title = "✅ Server Online: ${device.name}",
-                            message = "${device.name} is now online and reachable!",
+                            title = "✅ Server Online",
+                            message = "${device.name} is now online and reachable.",
                             isSuccess = true
                         )
                         ServerWidgetProvider.updateAllWidgets(appContext)
@@ -173,8 +173,8 @@ class ActionTriggerWorker(
                         NotificationHelper.sendNotification(
                             context = appContext,
                             id = device.id.hashCode(),
-                            title = "🛑 Server Offline: ${device.name}",
-                            message = "${device.name} has shut down and is now offline.",
+                            title = "⚠️ Server Offline",
+                            message = "${device.name} has powered off or is offline.",
                             isSuccess = false
                         )
                         ServerWidgetProvider.updateAllWidgets(appContext)
@@ -182,15 +182,9 @@ class ActionTriggerWorker(
                     }
                 }
                 TriggerAction.REBOOT -> {
+                    // No notification for reboot per user instructions
                     if (attempts >= 2 && status.isOnline) {
                         appSettings.setLastStatus(device.id, true)
-                        NotificationHelper.sendNotification(
-                            context = appContext,
-                            id = device.id.hashCode(),
-                            title = "✅ Reboot Complete: ${device.name}",
-                            message = "${device.name} successfully rebooted and is back online!",
-                            isSuccess = true
-                        )
                         ServerWidgetProvider.updateAllWidgets(appContext)
                         return
                     }

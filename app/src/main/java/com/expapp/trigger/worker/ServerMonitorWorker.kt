@@ -109,7 +109,7 @@ class ServerMonitorWorker(
                 NotificationHelper.sendNotification(
                     context = appContext,
                     id = device.id.hashCode(),
-                    title = if (status.isOnline) "✅ Server Back Online" else "⚠️ Server Offline",
+                    title = if (status.isOnline) "✅ Server Online" else "⚠️ Server Offline",
                     message = if (status.isOnline) {
                         "${device.name} is now online and reachable."
                     } else {

@@ -30,7 +30,8 @@ class UpdateManager(
         .connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(60, TimeUnit.SECONDS)
         .build(),
-    val githubRepo: String = "vaishnosingh/server-control-app"
+    val primaryReleasesUrl: String = "https://forge.linuxguy.space/api/v1/repos/vaishnosingh/server-control-app/releases",
+    val fallbackReleasesUrl: String = "https://api.github.com/repos/vaishnosingh/server-control-app/releases"
 ) {
     private val mainHandler = try {
         val looper = Looper.getMainLooper()
@@ -44,11 +45,27 @@ class UpdateManager(
     }
 
     /**
-     * Synchronously checks GitHub Releases API for the latest published release.
+     * Synchronously checks for updates from the self-hosted Git server (primary),
+     * and automatically falls back to GitHub if the primary server fails or is unreachable.
      * Suitable for use inside background workers (e.g. WorkManager CoroutineWorker).
      */
     fun checkForUpdateSync(currentVersionName: String): UpdateCheckResult {
-        val url = "https://api.github.com/repos/$githubRepo/releases"
+        // 1. Try Primary: Self-hosted Git server (forge.linuxguy.space)
+        val primaryResult = queryReleasesSync(primaryReleasesUrl, currentVersionName)
+        if (primaryResult is UpdateCheckResult.UpdateAvailable || primaryResult is UpdateCheckResult.UpToDate) {
+            return primaryResult
+        }
+
+        // 2. Fallback: GitHub releases API
+        val fallbackResult = queryReleasesSync(fallbackReleasesUrl, currentVersionName)
+        if (fallbackResult is UpdateCheckResult.UpdateAvailable || fallbackResult is UpdateCheckResult.UpToDate) {
+            return fallbackResult
+        }
+
+        return primaryResult // Return original error if both failed
+    }
+
+    private fun queryReleasesSync(url: String, currentVersionName: String): UpdateCheckResult {
         val request = Request.Builder()
             .url(url)
             .addHeader("Accept", "application/vnd.github.v3+json")
@@ -63,14 +80,74 @@ class UpdateManager(
                     return UpdateCheckResult.UpToDate
                 }
                 if (!res.isSuccessful) {
-                    return UpdateCheckResult.Error("HTTP ${res.code}: Unable to check updates")
+                    return UpdateCheckResult.Error("HTTP ${res.code}: Unable to check updates from $url")
                 }
                 val body = res.body?.string().orEmpty()
                 parseReleases(body, currentVersionName)
             }
         } catch (e: Exception) {
-            UpdateCheckResult.Error("Network error: ${e.localizedMessage}")
+            UpdateCheckResult.Error("Network error ($url): ${e.localizedMessage}")
         }
+    }
+
+    /**
+     * Asynchronously checks for updates with primary (self-hosted) -> fallback (GitHub) strategy.
+     */
+    fun checkForUpdate(
+        currentVersionName: String,
+        callback: (UpdateCheckResult) -> Unit
+    ) {
+        // Try Primary first
+        queryReleasesAsync(primaryReleasesUrl, currentVersionName) { primaryResult ->
+            if (primaryResult is UpdateCheckResult.UpdateAvailable || primaryResult is UpdateCheckResult.UpToDate) {
+                runOnMain { callback(primaryResult) }
+            } else {
+                // Primary failed, query GitHub fallback
+                queryReleasesAsync(fallbackReleasesUrl, currentVersionName) { fallbackResult ->
+                    if (fallbackResult is UpdateCheckResult.UpdateAvailable || fallbackResult is UpdateCheckResult.UpToDate) {
+                        runOnMain { callback(fallbackResult) }
+                    } else {
+                        runOnMain { callback(primaryResult) }
+                    }
+                }
+            }
+        }
+    }
+
+    private fun queryReleasesAsync(
+        url: String,
+        currentVersionName: String,
+        onComplete: (UpdateCheckResult) -> Unit
+    ) {
+        val request = Request.Builder()
+            .url(url)
+            .addHeader("Accept", "application/vnd.github.v3+json")
+            .addHeader("User-Agent", "ServerControlApp")
+            .get()
+            .build()
+
+        okHttpClient.newCall(request).enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                onComplete(UpdateCheckResult.Error("Network error: ${e.localizedMessage}"))
+            }
+
+            override fun onResponse(call: Call, response: Response) {
+                response.use { res ->
+                    if (res.code == 404) {
+                        onComplete(UpdateCheckResult.UpToDate)
+                        return
+                    }
+                    if (!res.isSuccessful) {
+                        onComplete(UpdateCheckResult.Error("HTTP ${res.code}: Unable to check updates"))
+                        return
+                    }
+
+                    val body = res.body?.string().orEmpty()
+                    val result = parseReleases(body, currentVersionName)
+                    onComplete(result)
+                }
+            }
+        })
     }
 
     private fun parseReleases(body: String, currentVersionName: String): UpdateCheckResult {
@@ -150,50 +227,7 @@ class UpdateManager(
         }
     }
 
-    /**
-     * Checks GitHub Releases API for the latest published release.
-     */
-    fun checkForUpdate(
-        currentVersionName: String,
-        callback: (UpdateCheckResult) -> Unit
-    ) {
-        // Query releases list so we always inspect the highest semantic version
-        val url = "https://api.github.com/repos/$githubRepo/releases"
 
-        val request = Request.Builder()
-            .url(url)
-            .addHeader("Accept", "application/vnd.github.v3+json")
-            .addHeader("User-Agent", "ServerControlApp")
-            .get()
-            .build()
-
-        okHttpClient.newCall(request).enqueue(object : Callback {
-            override fun onFailure(call: Call, e: IOException) {
-                runOnMain {
-                    callback(UpdateCheckResult.Error("Network error: ${e.localizedMessage}"))
-                }
-            }
-
-            override fun onResponse(call: Call, response: Response) {
-                response.use { res ->
-                    if (res.code == 404) {
-                        runOnMain { callback(UpdateCheckResult.UpToDate) }
-                        return
-                    }
-                    if (!res.isSuccessful) {
-                        runOnMain {
-                            callback(UpdateCheckResult.Error("HTTP ${res.code}: Unable to check updates"))
-                        }
-                        return
-                    }
-
-                    val body = res.body?.string().orEmpty()
-                    val result = parseReleases(body, currentVersionName)
-                    runOnMain { callback(result) }
-                }
-            }
-        })
-    }
 
     /**
      * Downloads the APK file to the app's cache directory and streams progress updates.
