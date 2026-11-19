@@ -2,14 +2,23 @@ package com.expapp.trigger.network
 
 import android.os.Handler
 import android.os.Looper
+import com.expapp.trigger.data.model.CpuMetrics
 import com.expapp.trigger.data.model.DeviceConfig
+import com.expapp.trigger.data.model.DiskMetrics
+import com.expapp.trigger.data.model.RamMetrics
 import com.expapp.trigger.data.model.ScheduledTask
 import com.expapp.trigger.data.model.ScheduledTasksResponse
 import com.expapp.trigger.data.model.ServiceOperation
 import com.expapp.trigger.data.model.SysPulseStatus
+import com.expapp.trigger.data.model.SysServiceInfo
 import com.google.gson.Gson
+import com.google.gson.GsonBuilder
+import com.google.gson.JsonDeserializationContext
+import com.google.gson.JsonDeserializer
+import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
+import com.google.gson.reflect.TypeToken
 import okhttp3.Call
 import okhttp3.Callback
 import okhttp3.MediaType.Companion.toMediaType
@@ -18,7 +27,40 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 import java.io.IOException
+import java.lang.reflect.Type
 import java.util.concurrent.TimeUnit
+
+class SysPulseStatusDeserializer : JsonDeserializer<SysPulseStatus> {
+    override fun deserialize(json: JsonElement, typeOfT: Type, context: JsonDeserializationContext): SysPulseStatus {
+        if (!json.isJsonObject) return SysPulseStatus()
+        val obj = json.asJsonObject
+        val cpu = if (obj.has("cpu") && obj.get("cpu").isJsonObject) {
+            context.deserialize<CpuMetrics>(obj.get("cpu"), CpuMetrics::class.java) ?: CpuMetrics()
+        } else CpuMetrics()
+        val ram = if (obj.has("ram") && obj.get("ram").isJsonObject) {
+            context.deserialize<RamMetrics>(obj.get("ram"), RamMetrics::class.java) ?: RamMetrics()
+        } else RamMetrics()
+        val disk = if (obj.has("disk") && obj.get("disk").isJsonArray) {
+            val listType = object : TypeToken<List<DiskMetrics>>() {}.type
+            context.deserialize<List<DiskMetrics>>(obj.get("disk"), listType) ?: emptyList()
+        } else emptyList()
+        val services = if (obj.has("services") && obj.get("services").isJsonArray) {
+            val listType = object : TypeToken<List<SysServiceInfo>>() {}.type
+            context.deserialize<List<SysServiceInfo>>(obj.get("services"), listType) ?: emptyList()
+        } else emptyList()
+        val uptime = obj.get("uptime")?.asString ?: ""
+        val success = obj.get("success")?.asBoolean ?: true
+
+        return SysPulseStatus(
+            success = success,
+            uptime = uptime,
+            cpu = cpu,
+            ram = ram,
+            disk = disk,
+            services = services
+        )
+    }
+}
 
 class SysPulseClient(
     private val okHttpClient: OkHttpClient = OkHttpClient.Builder()
@@ -27,7 +69,9 @@ class SysPulseClient(
         .connectTimeout(8, TimeUnit.SECONDS)
         .readTimeout(12, TimeUnit.SECONDS)
         .build(),
-    private val gson: Gson = Gson()
+    private val gson: Gson = GsonBuilder()
+        .registerTypeAdapter(SysPulseStatus::class.java, SysPulseStatusDeserializer())
+        .create()
 ) {
     companion object {
         const val DEFAULT_FALLBACK_SECRET = "default_pulse_secret_key_change_me"

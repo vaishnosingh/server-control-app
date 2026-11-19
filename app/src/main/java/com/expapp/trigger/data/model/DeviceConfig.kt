@@ -7,7 +7,7 @@ data class DeviceConfig(
     val name: String,
     val node: String,
     val secretKey: String,
-    val r2Url: String,
+    val r2Url: String = "",
     val powerOnUrl: String,
     val powerOffUrl: String,
     val rebootUrl: String,

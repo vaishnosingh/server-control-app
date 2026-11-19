@@ -117,14 +117,20 @@ class MainActivity : FragmentActivity() {
         }
 
         // Auto-upgrade existing default device with SysPulse defaults if missing
-        repository.getDevices().forEach { dev ->
-            if (dev.node.equals("debian", ignoreCase = true) && dev.syspulseUrl.isBlank()) {
-                val upgraded = dev.copy(
-                    syspulseUrl = "http://100.85.63.44:8088",
-                    syspulseSecretKey = if (dev.syspulseSecretKey.isBlank()) "default_pulse_secret_key_change_me" else dev.syspulseSecretKey
-                )
-                repository.updateDevice(upgraded)
+        try {
+            repository.getDevices().forEach { dev ->
+                val sysUrl = dev.syspulseUrl
+                val nodeName = dev.node
+                if (nodeName.equals("debian", ignoreCase = true) && sysUrl.isBlank()) {
+                    val upgraded = dev.copy(
+                        syspulseUrl = "http://100.85.63.44:8088",
+                        syspulseSecretKey = if (dev.syspulseSecretKey.isBlank()) "default_pulse_secret_key_change_me" else dev.syspulseSecretKey
+                    )
+                    repository.updateDevice(upgraded)
+                }
             }
+        } catch (_: Exception) {
+            // Guard against any startup migration issues
         }
         triggerClient = TriggerClient()
         appSettings = AppSettings(applicationContext)

@@ -4,7 +4,14 @@ import android.content.Context
 import android.content.SharedPreferences
 import com.expapp.trigger.data.model.DeviceConfig
 import com.google.gson.Gson
+import com.google.gson.GsonBuilder
+import com.google.gson.JsonDeserializationContext
+import com.google.gson.JsonDeserializer
+import com.google.gson.JsonElement
+import com.google.gson.JsonObject
 import com.google.gson.reflect.TypeToken
+import java.lang.reflect.Type
+import java.util.UUID
 
 interface KeyValueStorage {
     fun getString(key: String, defaultValue: String?): String?
@@ -44,8 +51,29 @@ class SharedPrefsStorage(
     }
 }
 
+class DeviceConfigDeserializer : JsonDeserializer<DeviceConfig> {
+    override fun deserialize(json: JsonElement, typeOfT: Type, context: JsonDeserializationContext): DeviceConfig {
+        val obj = if (json.isJsonObject) json.asJsonObject else JsonObject()
+        return DeviceConfig(
+            id = obj.get("id")?.asString?.ifBlank { UUID.randomUUID().toString() } ?: UUID.randomUUID().toString(),
+            name = obj.get("name")?.asString ?: "Server",
+            node = obj.get("node")?.asString ?: "debian",
+            secretKey = obj.get("secretKey")?.asString ?: "",
+            r2Url = obj.get("r2Url")?.asString ?: "",
+            powerOnUrl = obj.get("powerOnUrl")?.asString ?: "",
+            powerOffUrl = obj.get("powerOffUrl")?.asString ?: "",
+            rebootUrl = obj.get("rebootUrl")?.asString ?: "",
+            statusUrl = obj.get("statusUrl")?.asString ?: "",
+            syspulseUrl = obj.get("syspulseUrl")?.asString ?: "",
+            syspulseSecretKey = obj.get("syspulseSecretKey")?.asString ?: ""
+        )
+    }
+}
+
 class DeviceRepository(private val storage: KeyValueStorage) {
-    private val gson = Gson()
+    private val gson: Gson = GsonBuilder()
+        .registerTypeAdapter(DeviceConfig::class.java, DeviceConfigDeserializer())
+        .create()
     private val storageKey = "saved_devices_json"
 
     fun getDevices(): List<DeviceConfig> {

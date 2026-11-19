@@ -120,4 +120,16 @@ class DeviceRepositoryTest {
 
         org.junit.Assert.assertFalse(updated)
     }
+
+    @Test
+    fun getDevices_whenOldJsonWithoutSyspulse_doesNotCrash() {
+        val oldJson = """[{"id":"2dc98ae9-9f71-4f29-95a6-a59ac94d7bf6","name":"Server","node":"debian","secretKey":"Carbon@12","r2Url":"https://bucket.linuxguy.space/home-server-app/endpoints.json","powerOnUrl":"https://trigger.macrodroid.com/87f2f62c-09ee-43cb-8796-fd1a6465754b/wakeserver","powerOffUrl":"https://cosmos.linuxguy.space/poweroff?node=debian","rebootUrl":"https://cosmos.linuxguy.space/reboot?node=debian","statusUrl":"https://cosmos.linuxguy.space/status?node=debian"}]"""
+        storage.putString("saved_devices_json", oldJson)
+
+        val devices = repository.getDevices()
+        assertEquals(1, devices.size)
+        val dev = devices[0]
+        assertTrue(dev.syspulseUrl.isBlank())
+        assertTrue(dev.syspulseSecretKey.isBlank())
+    }
 }
