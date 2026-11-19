@@ -48,8 +48,12 @@ class SysPulseStatusDeserializer : JsonDeserializer<SysPulseStatus> {
             val listType = object : TypeToken<List<SysServiceInfo>>() {}.type
             context.deserialize<List<SysServiceInfo>>(obj.get("services"), listType) ?: emptyList()
         } else emptyList()
-        val uptime = obj.get("uptime")?.asString ?: ""
-        val success = obj.get("success")?.asBoolean ?: true
+        val uptime = if (obj.has("uptime") && !obj.get("uptime").isJsonNull && obj.get("uptime").isJsonPrimitive) {
+            try { obj.get("uptime").asString ?: "" } catch (_: Exception) { "" }
+        } else ""
+        val success = if (obj.has("success") && !obj.get("success").isJsonNull && obj.get("success").isJsonPrimitive) {
+            try { obj.get("success").asBoolean } catch (_: Exception) { true }
+        } else true
 
         return SysPulseStatus(
             success = success,

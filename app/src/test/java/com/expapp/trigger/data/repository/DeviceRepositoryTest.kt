@@ -132,4 +132,18 @@ class DeviceRepositoryTest {
         assertTrue(dev.syspulseUrl.isBlank())
         assertTrue(dev.syspulseSecretKey.isBlank())
     }
+
+    @Test
+    fun getDevices_whenJsonContainsExplicitNulls_doesNotCrash() {
+        val jsonWithNulls = """[{"id":"2dc98ae9-9f71-4f29-95a6-a59ac94d7bf6","name":"Server","node":"debian","secretKey":"Carbon@12","r2Url":null,"powerOnUrl":"https://trigger.macrodroid.com","powerOffUrl":"https://cosmos.linuxguy.space","rebootUrl":"https://cosmos.linuxguy.space","statusUrl":null,"syspulseUrl":null,"syspulseSecretKey":null}]"""
+        storage.putString("saved_devices_json", jsonWithNulls)
+
+        val devices = repository.getDevices()
+        assertEquals(1, devices.size)
+        val dev = devices[0]
+        assertEquals("", dev.r2Url)
+        assertEquals("", dev.statusUrl)
+        assertEquals("", dev.syspulseUrl)
+        assertEquals("", dev.syspulseSecretKey)
+    }
 }

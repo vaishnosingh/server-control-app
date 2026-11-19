@@ -93,7 +93,8 @@ fun CircularMetricGauge(
     modifier: Modifier = Modifier,
     size: Int = 110
 ) {
-    val clampedPct = percentage.coerceIn(0.0, 100.0).toFloat()
+    val safePct = if (percentage.isNaN() || percentage.isInfinite()) 0.0 else percentage
+    val clampedPct = safePct.coerceIn(0.0, 100.0).toFloat()
     val animatedSweep by animateFloatAsState(
         targetValue = clampedPct * 2.6f, // 260 degrees arc
         animationSpec = tween(700, easing = FastOutSlowInEasing),

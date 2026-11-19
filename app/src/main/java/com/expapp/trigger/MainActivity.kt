@@ -93,8 +93,25 @@ class MainActivity : FragmentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
+        val origHandler = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+            android.util.Log.e("CrashHandler", "Crash on ${thread.name}", throwable)
+            try {
+                getSharedPreferences("app_settings_prefs", Context.MODE_PRIVATE)
+                    .edit()
+                    .putString("last_crash_log", "${throwable.javaClass.simpleName}: ${throwable.message}\n" + throwable.stackTraceToString().take(1500))
+                    .commit()
+            } catch (_: Exception) {}
+            origHandler?.uncaughtException(thread, throwable)
+        }
+
         repository = DeviceRepository(SharedPrefsStorage(applicationContext))
         val settingsPrefs = getSharedPreferences("app_settings_prefs", Context.MODE_PRIVATE)
+        val lastCrash = settingsPrefs.getString("last_crash_log", null)
+        if (!lastCrash.isNullOrBlank()) {
+            settingsPrefs.edit().remove("last_crash_log").apply()
+            android.util.Log.e("CrashReport", "Recovered from crash: $lastCrash")
+        }
         val hasSeeded = settingsPrefs.getBoolean("has_seeded_default_device", false)
         if (!hasSeeded) {
             settingsPrefs.edit().putBoolean("has_seeded_default_device", true).apply()

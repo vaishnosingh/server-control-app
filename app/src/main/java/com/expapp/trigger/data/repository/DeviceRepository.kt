@@ -51,21 +51,27 @@ class SharedPrefsStorage(
     }
 }
 
+private fun JsonObject.getStringSafe(key: String, default: String = ""): String {
+    val elem = get(key) ?: return default
+    if (elem.isJsonNull || !elem.isJsonPrimitive) return default
+    return try { elem.asString ?: default } catch (_: Exception) { default }
+}
+
 class DeviceConfigDeserializer : JsonDeserializer<DeviceConfig> {
     override fun deserialize(json: JsonElement, typeOfT: Type, context: JsonDeserializationContext): DeviceConfig {
         val obj = if (json.isJsonObject) json.asJsonObject else JsonObject()
         return DeviceConfig(
-            id = obj.get("id")?.asString?.ifBlank { UUID.randomUUID().toString() } ?: UUID.randomUUID().toString(),
-            name = obj.get("name")?.asString ?: "Server",
-            node = obj.get("node")?.asString ?: "debian",
-            secretKey = obj.get("secretKey")?.asString ?: "",
-            r2Url = obj.get("r2Url")?.asString ?: "",
-            powerOnUrl = obj.get("powerOnUrl")?.asString ?: "",
-            powerOffUrl = obj.get("powerOffUrl")?.asString ?: "",
-            rebootUrl = obj.get("rebootUrl")?.asString ?: "",
-            statusUrl = obj.get("statusUrl")?.asString ?: "",
-            syspulseUrl = obj.get("syspulseUrl")?.asString ?: "",
-            syspulseSecretKey = obj.get("syspulseSecretKey")?.asString ?: ""
+            id = obj.getStringSafe("id").ifBlank { UUID.randomUUID().toString() },
+            name = obj.getStringSafe("name", "Server"),
+            node = obj.getStringSafe("node", "debian"),
+            secretKey = obj.getStringSafe("secretKey"),
+            r2Url = obj.getStringSafe("r2Url"),
+            powerOnUrl = obj.getStringSafe("powerOnUrl"),
+            powerOffUrl = obj.getStringSafe("powerOffUrl"),
+            rebootUrl = obj.getStringSafe("rebootUrl"),
+            statusUrl = obj.getStringSafe("statusUrl"),
+            syspulseUrl = obj.getStringSafe("syspulseUrl"),
+            syspulseSecretKey = obj.getStringSafe("syspulseSecretKey")
         )
     }
 }
