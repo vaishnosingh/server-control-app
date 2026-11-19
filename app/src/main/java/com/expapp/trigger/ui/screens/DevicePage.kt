@@ -31,7 +31,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CloudSync
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.PowerOff
@@ -119,6 +121,7 @@ fun DevicePage(
     var pendingAction by remember { mutableStateOf<TriggerAction?>(null) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var showEditDialog by remember { mutableStateOf(false) }
+    var showMenu by remember { mutableStateOf(false) }
 
     if (showEditDialog) {
         var editName by remember { mutableStateOf(device.name) }
@@ -391,10 +394,10 @@ fun DevicePage(
                         )
                     }
 
-                    // Compact, non-overlapping button bar
+                    // Compact, non-overlapping actions: Single Refresh + Overflow Menu
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         // Refresh button (syncs status & R2 endpoints)
                         IconButton(
@@ -428,38 +431,62 @@ fun DevicePage(
                             )
                         }
 
-                        // Edit device button
-                        IconButton(
-                            onClick = { showEditDialog = true },
-                            modifier = Modifier
-                                .size(34.dp)
-                                .clip(RoundedCornerShape(9.dp))
-                                .background(BorderSubtle.copy(alpha = 0.25f))
-                                .border(1.dp, BorderSubtle, RoundedCornerShape(9.dp))
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Edit,
-                                contentDescription = "Edit device",
-                                tint = TextSecondary,
-                                modifier = Modifier.size(16.dp)
-                            )
-                        }
+                        // More Options Overflow (Edit / Delete)
+                        Box {
+                            IconButton(
+                                onClick = { showMenu = true },
+                                modifier = Modifier
+                                    .size(34.dp)
+                                    .clip(RoundedCornerShape(9.dp))
+                                    .background(BorderSubtle.copy(alpha = 0.25f))
+                                    .border(1.dp, BorderSubtle, RoundedCornerShape(9.dp))
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.MoreVert,
+                                    contentDescription = "Device options",
+                                    tint = TextSecondary,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
 
-                        // Delete button
-                        IconButton(
-                            onClick = { showDeleteConfirm = true },
-                            modifier = Modifier
-                                .size(34.dp)
-                                .clip(RoundedCornerShape(9.dp))
-                                .background(RedVibrant.copy(alpha = 0.08f))
-                                .border(1.dp, RedVibrant.copy(alpha = 0.2f), RoundedCornerShape(9.dp))
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.DeleteOutline,
-                                contentDescription = "Remove device",
-                                tint = RedVibrant.copy(alpha = 0.8f),
-                                modifier = Modifier.size(17.dp)
-                            )
+                            DropdownMenu(
+                                expanded = showMenu,
+                                onDismissRequest = { showMenu = false },
+                                modifier = Modifier
+                                    .background(BgElevated)
+                                    .border(1.dp, BorderSubtle, RoundedCornerShape(12.dp))
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text("Edit Device", color = TextPrimary) },
+                                    leadingIcon = {
+                                        Icon(
+                                            Icons.Default.Edit,
+                                            contentDescription = null,
+                                            tint = TextSecondary,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    },
+                                    onClick = {
+                                        showMenu = false
+                                        showEditDialog = true
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Remove Device", color = RedVibrant) },
+                                    leadingIcon = {
+                                        Icon(
+                                            Icons.Default.DeleteOutline,
+                                            contentDescription = null,
+                                            tint = RedVibrant,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    },
+                                    onClick = {
+                                        showMenu = false
+                                        showDeleteConfirm = true
+                                    }
+                                )
+                            }
                         }
                     }
                 }

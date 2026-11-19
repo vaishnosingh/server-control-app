@@ -327,13 +327,6 @@ fun MainScreen(
         }
     }
 
-    // Spin animation for sync button
-    val rotationAngle by animateFloatAsState(
-        targetValue = if (isSyncing) 360f else 0f,
-        animationSpec = if (isSyncing) tween(900, easing = FastOutSlowInEasing) else tween(0),
-        label = "sync_rotate"
-    )
-
     Scaffold(
         modifier = modifier.fillMaxSize(),
         containerColor = BgBase,
@@ -341,52 +334,50 @@ fun MainScreen(
             TopAppBar(
                 title = {
                     Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(start = 2.dp)
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
                             Icons.Default.Terminal,
                             contentDescription = null,
                             tint = GreenVibrant,
-                            modifier = Modifier.size(18.dp)
+                            modifier = Modifier.size(16.dp)
                         )
-                        Spacer(modifier = Modifier.width(6.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
                         Text(
-                            text = "DEVICE TRIGGER",
+                            text = "TRIGGER",
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
-                            letterSpacing = 1.2.sp,
+                            letterSpacing = 1.sp,
                             color = TextPrimary,
                             fontFamily = FontFamily.Monospace,
                             maxLines = 1
                         )
                         val onlineCount = devices.count { nodeStatuses[it.id]?.isOnline == true }
                         if (devices.isNotEmpty() && onlineCount > 0) {
-                            Spacer(modifier = Modifier.width(6.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
                             Box(
                                 modifier = Modifier
                                     .clip(CircleShape)
                                     .background(OnlineBg)
                                     .border(1.dp, OnlineBorder, CircleShape)
-                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                                    .padding(horizontal = 5.dp, vertical = 1.dp)
                             ) {
                                 Text(
-                                    "$onlineCount on",
+                                    "$onlineCount",
                                     fontSize = 9.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = OnlineText,
-                                    letterSpacing = 0.5.sp
+                                    color = OnlineText
                                 )
                             }
                         }
                     }
                 },
                 actions = {
-                    // Update Button
+                    // Update Button (only when update is ready)
                     if (availableUpdate != null) {
                         IconButton(
                             onClick = { showUpdateDialog = true },
-                            modifier = Modifier.size(32.dp)
+                            modifier = Modifier.size(30.dp)
                         ) {
                             Box(contentAlignment = Alignment.TopEnd) {
                                 Icon(
@@ -411,55 +402,39 @@ fun MainScreen(
                             historyLogs = historyRepository.getLogs()
                             showHistoryDialog = true
                         },
-                        modifier = Modifier.size(32.dp)
+                        modifier = Modifier.size(30.dp)
                     ) {
                         Icon(
                             Icons.Default.History,
                             contentDescription = "Trigger History",
                             tint = TextSecondary,
-                            modifier = Modifier.size(19.dp)
+                            modifier = Modifier.size(18.dp)
                         )
                     }
 
                     // Settings Button
                     IconButton(
                         onClick = { showSettingsDialog = true },
-                        modifier = Modifier.size(32.dp)
+                        modifier = Modifier.size(30.dp)
                     ) {
                         Icon(
                             Icons.Default.Settings,
                             contentDescription = "Settings",
                             tint = TextSecondary,
-                            modifier = Modifier.size(19.dp)
-                        )
-                    }
-
-                    // Unified Refresh / Sync Button
-                    IconButton(
-                        onClick = { refreshWholePage() },
-                        enabled = !isSyncing && !isPullRefreshing,
-                        modifier = Modifier.size(32.dp)
-                    ) {
-                        Icon(
-                            Icons.Default.Refresh,
-                            "Refresh all",
-                            tint = if (isSyncing || isPullRefreshing) TextMuted else GreenVibrant,
-                            modifier = Modifier
-                                .size(19.dp)
-                                .rotate(if (isSyncing || isPullRefreshing) rotationAngle else 0f)
+                            modifier = Modifier.size(18.dp)
                         )
                     }
 
                     // Add Device Button
                     IconButton(
                         onClick = { coroutineScope.launch { pagerState.animateScrollToPage(devices.size) } },
-                        modifier = Modifier.size(32.dp)
+                        modifier = Modifier.size(30.dp)
                     ) {
                         Icon(
                             Icons.Default.Add,
                             "Add Device",
                             tint = GreenVibrant,
-                            modifier = Modifier.size(20.dp)
+                            modifier = Modifier.size(19.dp)
                         )
                     }
                 },
