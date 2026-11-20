@@ -132,9 +132,7 @@ fun DashboardScreen(
                 pulseStatus = it
                 errorMessage = null
             }.onFailure { err ->
-                if (pulseStatus == null) {
-                    errorMessage = err.localizedMessage ?: "Unable to connect to SysPulse at $effectiveUrl"
-                }
+                errorMessage = err.localizedMessage ?: "Unable to connect to SysPulse at $effectiveUrl"
             }
         }
 
@@ -330,6 +328,7 @@ fun DashboardScreen(
                         }
 
                         Row(verticalAlignment = Alignment.CenterVertically) {
+                            val isPulseError = errorMessage != null
                             Text(
                                 text = "POLL",
                                 fontSize = 10.sp,
@@ -337,10 +336,10 @@ fun DashboardScreen(
                             )
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(
-                                text = if (isPollingActive) "3s" else "PAUSED",
+                                text = if (!isPollingActive) "PAUSED" else if (isPulseError) "RETRYING" else "3s",
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = if (isPollingActive) GreenVibrant else AmberVibrant,
+                                color = if (!isPollingActive) AmberVibrant else if (isPulseError) RedVibrant else GreenVibrant,
                                 fontFamily = FontFamily.Monospace
                             )
                         }
