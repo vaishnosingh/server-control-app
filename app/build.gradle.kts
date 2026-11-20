@@ -11,8 +11,8 @@ android {
         applicationId = "com.expapp.trigger"
         minSdk = 24
         targetSdk = 34
-        versionCode = 22
-        versionName = "1.3.3"
+        versionCode = 23
+        versionName = "1.3.4"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {

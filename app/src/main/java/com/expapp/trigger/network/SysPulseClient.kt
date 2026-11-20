@@ -328,7 +328,13 @@ class SysPulseClient(
 
                     val body = res.body?.string().orEmpty()
                     if (!res.isSuccessful) {
-                        runOnMain { onResult(Result.failure(IOException("HTTP ${res.code}"))) }
+                        val errorMsg = try {
+                            val json = JsonParser.parseString(body).asJsonObject
+                            json.get("error")?.asString ?: "HTTP ${res.code}"
+                        } catch (_: Exception) {
+                            "HTTP ${res.code}"
+                        }
+                        runOnMain { onResult(Result.failure(IOException(errorMsg))) }
                         return
                     }
 

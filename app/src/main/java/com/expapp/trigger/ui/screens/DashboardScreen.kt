@@ -137,8 +137,13 @@ fun DashboardScreen(
         }
 
         sysPulseClient.fetchTasks(effectiveUrl, effectiveSecret) { result ->
-            result.onSuccess {
-                scheduledTasks = it
+            result.onSuccess { allTasks ->
+                // Only show active pending tasks in the dashboard
+                scheduledTasks = allTasks.filter {
+                    it.status.equals("pending", ignoreCase = true) ||
+                    it.status.equals("active", ignoreCase = true) ||
+                    it.status.equals("scheduled", ignoreCase = true)
+                }
             }
         }
     }

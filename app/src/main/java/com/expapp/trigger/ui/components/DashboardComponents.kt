@@ -697,16 +697,22 @@ fun ScheduledTaskCard(
                 }
             }
 
-            IconButton(
-                onClick = { onCancel(task) },
-                modifier = Modifier.size(32.dp)
-            ) {
-                Icon(
-                    Icons.Default.Close,
-                    contentDescription = "Cancel Task",
-                    tint = RedVibrant,
-                    modifier = Modifier.size(18.dp)
-                )
+            val isCancellable = task.status.equals("pending", ignoreCase = true) ||
+                task.status.equals("active", ignoreCase = true) ||
+                task.status.equals("scheduled", ignoreCase = true)
+
+            if (isCancellable) {
+                IconButton(
+                    onClick = { onCancel(task) },
+                    modifier = Modifier.size(32.dp)
+                ) {
+                    Icon(
+                        Icons.Default.Close,
+                        contentDescription = "Cancel Task",
+                        tint = RedVibrant,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
             }
         }
     }
