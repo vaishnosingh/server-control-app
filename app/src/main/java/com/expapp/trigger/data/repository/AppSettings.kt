@@ -2,6 +2,18 @@ package com.expapp.trigger.data.repository
 
 import android.content.Context
 
+enum class ThemeMode(val label: String) {
+    SYSTEM("System"),
+    LIGHT("Light"),
+    DARK("Dark");
+
+    companion object {
+        fun fromStored(value: String?): ThemeMode {
+            return entries.firstOrNull { it.name.equals(value, ignoreCase = true) } ?: SYSTEM
+        }
+    }
+}
+
 class AppSettings(private val storage: KeyValueStorage) {
 
     constructor(context: Context) : this(SharedPrefsStorage(context, "app_settings_prefs"))
@@ -12,7 +24,17 @@ class AppSettings(private val storage: KeyValueStorage) {
         private const val KEY_BG_MONITOR_ENABLED = "key_bg_monitor_enabled"
         private const val KEY_LAST_STATUS_PREFIX = "last_status_"
         private const val KEY_LAST_NOTIFIED_VERSION = "key_last_notified_version"
+        private const val KEY_THEME_MODE = "key_theme_mode"
+        private const val KEY_DYNAMIC_COLOR = "key_dynamic_color"
     }
+
+    var themeMode: ThemeMode
+        get() = ThemeMode.fromStored(storage.getString(KEY_THEME_MODE, ThemeMode.SYSTEM.name))
+        set(value) = storage.putString(KEY_THEME_MODE, value.name)
+
+    var isDynamicColorEnabled: Boolean
+        get() = storage.getBoolean(KEY_DYNAMIC_COLOR, true)
+        set(value) = storage.putBoolean(KEY_DYNAMIC_COLOR, value)
 
     var lastNotifiedUpdateVersion: String?
         get() = storage.getString(KEY_LAST_NOTIFIED_VERSION, null)

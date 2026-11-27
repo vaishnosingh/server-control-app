@@ -165,16 +165,51 @@ class MainActivity : FragmentActivity() {
         handleIntent(intent)
 
         setContent {
-            ExpAppTheme {
+            val themeModeState = androidx.compose.runtime.remember {
+                androidx.compose.runtime.mutableStateOf(appSettings.themeMode)
+            }
+            val dynamicColorState = androidx.compose.runtime.remember {
+                androidx.compose.runtime.mutableStateOf(appSettings.isDynamicColorEnabled)
+            }
+
+            com.expapp.trigger.ui.theme.GlobalAppTheme(
+                themeMode = themeModeState.value,
+                dynamicColor = dynamicColorState.value
+            ) {
+                val isDark = com.expapp.trigger.ui.theme.LocalIsDarkTheme.current
+                androidx.compose.runtime.DisposableEffect(isDark) {
+                    enableEdgeToEdge(
+                        statusBarStyle = androidx.activity.SystemBarStyle.auto(
+                            android.graphics.Color.TRANSPARENT,
+                            android.graphics.Color.TRANSPARENT
+                        ) { isDark },
+                        navigationBarStyle = androidx.activity.SystemBarStyle.auto(
+                            android.graphics.Color.TRANSPARENT,
+                            android.graphics.Color.TRANSPARENT
+                        ) { isDark }
+                    )
+                    onDispose {}
+                }
+
                 Surface(
                     modifier = Modifier.fillMaxSize(),
-                    color = DarkBackground
+                    color = androidx.compose.material3.MaterialTheme.colorScheme.background
                 ) {
                     MainScreen(
                         repository = repository,
                         triggerClient = triggerClient,
                         appSettings = appSettings,
                         historyRepository = historyRepository,
+                        themeMode = themeModeState.value,
+                        onThemeModeChanged = { mode ->
+                            appSettings.themeMode = mode
+                            themeModeState.value = mode
+                        },
+                        isDynamicColorEnabled = dynamicColorState.value,
+                        onDynamicColorToggled = { enabled ->
+                            appSettings.isDynamicColorEnabled = enabled
+                            dynamicColorState.value = enabled
+                        },
                         requestBiometricAuth = { title, subtitle, onResult ->
                             BiometricHelper.authenticate(this, title, subtitle) { success, _ ->
                                 onResult(success)

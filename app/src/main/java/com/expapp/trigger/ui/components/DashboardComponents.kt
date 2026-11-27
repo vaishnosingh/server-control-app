@@ -6,7 +6,6 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -28,6 +27,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DeveloperBoard
@@ -44,12 +44,15 @@ import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
@@ -65,7 +68,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -76,17 +78,9 @@ import com.expapp.trigger.data.model.RamMetrics
 import com.expapp.trigger.data.model.ScheduledTask
 import com.expapp.trigger.data.model.ServiceOperation
 import com.expapp.trigger.data.model.SysServiceInfo
-import com.expapp.trigger.ui.theme.AmberVibrant
-import com.expapp.trigger.ui.theme.BgCard
-import com.expapp.trigger.ui.theme.BgElevated
-import com.expapp.trigger.ui.theme.BgSurface
-import com.expapp.trigger.ui.theme.BorderDefault
-import com.expapp.trigger.ui.theme.BorderSubtle
-import com.expapp.trigger.ui.theme.GreenVibrant
-import com.expapp.trigger.ui.theme.RedVibrant
-import com.expapp.trigger.ui.theme.TextMuted
-import com.expapp.trigger.ui.theme.TextPrimary
-import com.expapp.trigger.ui.theme.TextSecondary
+import com.expapp.trigger.ui.theme.LocalIsDarkTheme
+import com.expapp.trigger.ui.theme.MonoFontFamily
+import com.expapp.trigger.ui.theme.PixelSemantic
 import java.util.Locale
 
 @Composable
@@ -95,8 +89,9 @@ fun CircularMetricGauge(
     label: String,
     sublabel: String,
     modifier: Modifier = Modifier,
-    size: Int = 88
+    size: Int = 96
 ) {
+    val dark = LocalIsDarkTheme.current
     val safePct = if (percentage.isNaN() || percentage.isInfinite()) 0.0 else percentage
     val clampedPct = safePct.coerceIn(0.0, 100.0).toFloat()
     val animatedSweep by animateFloatAsState(
@@ -107,13 +102,14 @@ fun CircularMetricGauge(
 
     val gaugeColor by animateColorAsState(
         targetValue = when {
-            clampedPct >= 85f -> RedVibrant
-            clampedPct >= 65f -> AmberVibrant
-            else -> GreenVibrant
+            clampedPct >= 85f -> MaterialTheme.colorScheme.error
+            clampedPct >= 65f -> PixelSemantic.warningAccent(dark)
+            else -> MaterialTheme.colorScheme.primary
         },
         animationSpec = tween(450),
         label = "gauge_color"
     )
+    val trackColor = MaterialTheme.colorScheme.surfaceContainerHighest
 
     Column(
         modifier = modifier,
@@ -124,9 +120,9 @@ fun CircularMetricGauge(
             contentAlignment = Alignment.Center
         ) {
             Canvas(modifier = Modifier.size((size - 8).dp)) {
-                val strokeW = 7.dp.toPx()
+                val strokeW = 9.dp.toPx()
                 drawArc(
-                    color = Color(0xFF222B3C),
+                    color = trackColor,
                     startAngle = 140f,
                     sweepAngle = 260f,
                     useCenter = false,
@@ -143,28 +139,28 @@ fun CircularMetricGauge(
 
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
-                    text = String.format(Locale.US, "%.1f%%", clampedPct),
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = TextPrimary,
-                    fontFamily = FontFamily.Monospace
+                    text = String.format(Locale.US, "%.0f%%", clampedPct),
+                    style = MaterialTheme.typography.titleLarge.copy(
+                        fontFeatureSettings = "tnum"
+                    ),
+                    color = MaterialTheme.colorScheme.onSurface
                 )
                 Text(
                     text = label,
-                    fontSize = 9.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = gaugeColor,
-                    letterSpacing = 0.6.sp
+                    style = MaterialTheme.typography.labelSmall,
+                    color = gaugeColor
                 )
             }
         }
         if (sublabel.isNotBlank()) {
-            Spacer(modifier = Modifier.height(2.dp))
+            Spacer(modifier = Modifier.height(4.dp))
             Text(
                 text = sublabel,
-                fontSize = 10.sp,
-                color = TextSecondary,
-                fontFamily = FontFamily.Monospace,
+                style = MaterialTheme.typography.bodySmall.copy(
+                    fontFamily = MonoFontFamily,
+                    fontFeatureSettings = "tnum"
+                ),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -173,7 +169,7 @@ fun CircularMetricGauge(
 }
 
 /**
- * Balanced 2-column CPU & RAM executive overview strip for the SysPulse dashboard.
+ * Side-by-side Material You tonal Compute Overview grid (CPU & Memory).
  */
 @Composable
 fun ComputeOverviewGrid(
@@ -191,113 +187,108 @@ fun ComputeOverviewGrid(
         modifier = modifier
             .fillMaxWidth()
             .height(IntrinsicSize.Max),
-        horizontalArrangement = Arrangement.spacedBy(10.dp)
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        // CPU Card
-        Column(
+        Surface(
             modifier = Modifier
                 .weight(1f)
-                .fillMaxHeight()
-                .clip(RoundedCornerShape(16.dp))
-                .background(BgCard)
-                .border(1.dp, BorderSubtle, RoundedCornerShape(16.dp))
-                .padding(12.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.SpaceBetween
+                .fillMaxHeight(),
+            shape = RoundedCornerShape(28.dp),
+            color = MaterialTheme.colorScheme.surfaceContainer
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
+            Column(
+                modifier = Modifier.padding(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.SpaceBetween
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        Icons.Default.DeveloperBoard,
-                        contentDescription = null,
-                        tint = GreenVibrant,
-                        modifier = Modifier.size(14.dp)
-                    )
-                    Spacer(modifier = Modifier.width(5.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            Icons.Default.DeveloperBoard,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "CPU",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
                     Text(
-                        text = "CPU",
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = TextSecondary,
-                        letterSpacing = 0.8.sp
+                        text = "${cpu.cores} cores",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                Text(
-                    text = "${cpu.cores}C",
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = TextMuted,
-                    fontFamily = FontFamily.Monospace
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                CircularMetricGauge(
+                    percentage = cpu.pct,
+                    label = String.format(Locale.US, "%.1f%%", cpu.pct.coerceIn(0.0, 100.0)),
+                    sublabel = String.format(
+                        Locale.US,
+                        "%.2f · %.2f · %.2f",
+                        loads.getOrElse(0) { 0.0 },
+                        loads.getOrElse(1) { 0.0 },
+                        loads.getOrElse(2) { 0.0 }
+                    )
                 )
             }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            CircularMetricGauge(
-                percentage = cpu.pct,
-                label = "LOAD",
-                sublabel = String.format(
-                    Locale.US,
-                    "%.2f · %.2f · %.2f",
-                    loads.getOrElse(0) { 0.0 },
-                    loads.getOrElse(1) { 0.0 },
-                    loads.getOrElse(2) { 0.0 }
-                )
-            )
         }
 
-        // RAM Card
-        Column(
+        Surface(
             modifier = Modifier
                 .weight(1f)
-                .fillMaxHeight()
-                .clip(RoundedCornerShape(16.dp))
-                .background(BgCard)
-                .border(1.dp, BorderSubtle, RoundedCornerShape(16.dp))
-                .padding(12.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.SpaceBetween
+                .fillMaxHeight(),
+            shape = RoundedCornerShape(28.dp),
+            color = MaterialTheme.colorScheme.surfaceContainer
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
+            Column(
+                modifier = Modifier.padding(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.SpaceBetween
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        Icons.Default.Memory,
-                        contentDescription = null,
-                        tint = AmberVibrant,
-                        modifier = Modifier.size(14.dp)
-                    )
-                    Spacer(modifier = Modifier.width(5.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            Icons.Default.Memory,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.tertiary,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "Memory",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
                     Text(
-                        text = "MEMORY",
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = TextSecondary,
-                        letterSpacing = 0.8.sp
+                        text = String.format(Locale.US, "%.1fG free", freeGb),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                Text(
-                    text = String.format(Locale.US, "%.1fG free", freeGb),
-                    fontSize = 10.sp,
-                    color = TextMuted,
-                    fontFamily = FontFamily.Monospace
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                CircularMetricGauge(
+                    percentage = safeRamPct,
+                    label = String.format(Locale.US, "%.1f%%", safeRamPct.coerceIn(0.0, 100.0)),
+                    sublabel = String.format(Locale.US, "%.1f / %.1f GB", usedGb, totalGb)
                 )
             }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            CircularMetricGauge(
-                percentage = safeRamPct,
-                label = "RAM",
-                sublabel = String.format(Locale.US, "%.1f / %.1f GB", usedGb, totalGb)
-            )
         }
     }
 }
@@ -307,44 +298,42 @@ fun DisksCard(
     disks: List<DiskMetrics>,
     modifier: Modifier = Modifier
 ) {
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(BgCard)
-            .border(1.dp, BorderSubtle, RoundedCornerShape(16.dp))
-            .padding(14.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(24.dp),
+        color = MaterialTheme.colorScheme.surfaceContainer
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
+        Column(
+            modifier = Modifier.padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Icon(
-                Icons.Default.Storage,
-                contentDescription = null,
-                tint = Color(0xFF38BDF8),
-                modifier = Modifier.size(15.dp)
-            )
-            Spacer(modifier = Modifier.width(7.dp))
-            Text(
-                text = "STORAGE MOUNTS",
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
-                color = TextSecondary,
-                letterSpacing = 0.8.sp
-            )
-            Spacer(modifier = Modifier.weight(1f))
-            Text(
-                text = "${disks.size} volumes",
-                fontSize = 10.sp,
-                color = TextMuted,
-                fontFamily = FontFamily.Monospace
-            )
-        }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    Icons.Default.Storage,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "Storage Volumes",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Spacer(modifier = Modifier.weight(1f))
+                Text(
+                    text = "${disks.size} mounts",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
 
-        disks.forEach { disk ->
-            DiskMountRow(disk = disk)
+            disks.forEach { disk ->
+                DiskMountRow(disk = disk)
+            }
         }
     }
 }
@@ -353,9 +342,9 @@ fun DisksCard(
 fun DiskMountRow(disk: DiskMetrics) {
     val safePct = if (disk.pct.isNaN() || disk.pct.isInfinite()) 0.0 else disk.pct
     val progress = (safePct / 100.0).coerceIn(0.0, 1.0).toFloat()
-    val barColor = if (progress > 0.85f) RedVibrant else Color(0xFF38BDF8)
+    val barColor = if (progress > 0.85f) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
 
-    Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
@@ -363,16 +352,19 @@ fun DiskMountRow(disk: DiskMetrics) {
         ) {
             Text(
                 text = disk.mount,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = TextPrimary,
-                fontFamily = FontFamily.Monospace
+                style = MaterialTheme.typography.bodyMedium.copy(
+                    fontFamily = MonoFontFamily,
+                    fontWeight = FontWeight.Medium
+                ),
+                color = MaterialTheme.colorScheme.onSurface
             )
             Text(
-                text = String.format(Locale.US, "%.1f / %.1f GB  (%.0f%%)", disk.usedGb, disk.totalGb, safePct),
-                fontSize = 11.sp,
-                color = if (progress > 0.85f) RedVibrant else TextSecondary,
-                fontFamily = FontFamily.Monospace
+                text = String.format(Locale.US, "%.1f / %.1f GB (%.0f%%)", disk.usedGb, disk.totalGb, safePct),
+                style = MaterialTheme.typography.bodySmall.copy(
+                    fontFamily = MonoFontFamily,
+                    fontFeatureSettings = "tnum"
+                ),
+                color = if (progress > 0.85f) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
 
@@ -380,78 +372,92 @@ fun DiskMountRow(disk: DiskMetrics) {
             progress = { progress },
             modifier = Modifier
                 .fillMaxWidth()
-                .height(5.dp)
-                .clip(RoundedCornerShape(3.dp)),
+                .height(8.dp)
+                .clip(RoundedCornerShape(4.dp)),
             color = barColor,
-            trackColor = BgElevated
+            trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+            strokeCap = StrokeCap.Round
         )
     }
 }
 
 /**
- * Clean, zero-clutter service row inside the SysPulse Services list.
- * Displays status telemetry & boot persistence only — tapping opens the dedicated ServiceDetailView.
+ * Clean Pixel Settings-style grouped service row — zero inline button clutter.
  */
 @Composable
 fun ServiceListRow(
     service: SysServiceInfo,
-    accentColor: Color,
     onOpenService: (SysServiceInfo) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val dark = LocalIsDarkTheme.current
     val isRunning = service.active && service.state.equals("running", ignoreCase = true)
     val isExited = service.state.equals("exited", ignoreCase = true)
-    val dotColor = when {
-        isRunning -> GreenVibrant
-        isExited -> AmberVibrant
-        else -> RedVibrant
+
+    val dotContainer = when {
+        isRunning -> PixelSemantic.onlineContainer(dark)
+        isExited -> PixelSemantic.warningContainer(dark)
+        else -> MaterialTheme.colorScheme.errorContainer
     }
-    val bootColor = if (service.enabled) Color(0xFF38BDF8) else TextMuted
+    val dotTint = when {
+        isRunning -> PixelSemantic.onlineAccent(dark)
+        isExited -> PixelSemantic.warningAccent(dark)
+        else -> MaterialTheme.colorScheme.error
+    }
 
     Row(
         modifier = modifier
             .fillMaxWidth()
             .clickable { onOpenService(service) }
-            .padding(horizontal = 14.dp, vertical = 12.dp),
+            .padding(horizontal = 16.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // State Dot
         Box(
             modifier = Modifier
-                .size(8.dp)
+                .size(36.dp)
                 .clip(CircleShape)
-                .background(dotColor)
-        )
+                .background(dotContainer),
+            contentAlignment = Alignment.Center
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(10.dp)
+                    .clip(CircleShape)
+                    .background(dotTint)
+            )
+        }
 
-        Spacer(modifier = Modifier.width(12.dp))
+        Spacer(modifier = Modifier.width(14.dp))
 
-        // Service Name & Systemd Unit
         Column(modifier = Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     text = service.name,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = TextPrimary,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
                 if (service.pid != null && service.pid > 0) {
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = "#${service.pid}",
-                        fontSize = 10.sp,
-                        color = TextMuted,
-                        fontFamily = FontFamily.Monospace
-                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Surface(
+                        shape = RoundedCornerShape(6.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainerHigh
+                    ) {
+                        Text(
+                            text = "PID ${service.pid}",
+                            style = MaterialTheme.typography.labelSmall.copy(fontFamily = MonoFontFamily),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    }
                 }
             }
             Spacer(modifier = Modifier.height(2.dp))
             Text(
                 text = service.unit,
-                fontSize = 11.sp,
-                color = TextMuted,
-                fontFamily = FontFamily.Monospace,
+                style = MaterialTheme.typography.bodySmall.copy(fontFamily = MonoFontFamily),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -459,24 +465,19 @@ fun ServiceListRow(
 
         Spacer(modifier = Modifier.width(8.dp))
 
-        // Compact Status & Boot Pills
         Column(
             horizontalAlignment = Alignment.End,
-            verticalArrangement = Arrangement.spacedBy(4.dp)
+            verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {
             Text(
-                text = service.state.uppercase(),
-                fontSize = 10.sp,
-                fontWeight = FontWeight.Bold,
-                color = dotColor,
-                fontFamily = FontFamily.Monospace
+                text = service.state.replaceFirstChar { it.uppercase() },
+                style = MaterialTheme.typography.labelMedium,
+                color = dotTint
             )
             Text(
-                text = if (service.enabled) "BOOT: ON" else "BOOT: OFF",
-                fontSize = 9.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = bootColor,
-                fontFamily = FontFamily.Monospace
+                text = if (service.enabled) "Boot On" else "Boot Off",
+                style = MaterialTheme.typography.labelSmall,
+                color = if (service.enabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
 
@@ -485,21 +486,19 @@ fun ServiceListRow(
         Icon(
             imageVector = Icons.Default.ChevronRight,
             contentDescription = "Manage ${service.name}",
-            tint = accentColor.copy(alpha = 0.7f),
-            modifier = Modifier.size(18.dp)
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(20.dp)
         )
     }
 }
 
 /**
- * Full-screen dedicated Service Control Workspace rendered when tapping a service row.
- * Houses Runtime Lifecycle controls, systemd Enable/Disable on Boot, and Scheduled Actions.
+ * Dedicated Material You Service Management screen when tapping any service row.
  */
 @Composable
 fun ServiceDetailView(
     service: SysServiceInfo,
     serverName: String,
-    accentColor: Color,
     isLoading: Boolean,
     serviceTasks: List<ScheduledTask>,
     onBack: () -> Unit,
@@ -508,12 +507,19 @@ fun ServiceDetailView(
     onCancelTask: (ScheduledTask) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val dark = LocalIsDarkTheme.current
     val isRunning = service.active && service.state.equals("running", ignoreCase = true)
     val isExited = service.state.equals("exited", ignoreCase = true)
-    val stateColor = when {
-        isRunning -> GreenVibrant
-        isExited -> AmberVibrant
-        else -> RedVibrant
+
+    val stateContainer = when {
+        isRunning -> PixelSemantic.onlineContainer(dark)
+        isExited -> PixelSemantic.warningContainer(dark)
+        else -> MaterialTheme.colorScheme.errorContainer
+    }
+    val stateText = when {
+        isRunning -> PixelSemantic.onOnlineContainer(dark)
+        isExited -> PixelSemantic.onWarningContainer(dark)
+        else -> MaterialTheme.colorScheme.onErrorContainer
     }
 
     var selectedDelayOp by remember(service.name) {
@@ -526,63 +532,49 @@ fun ServiceDetailView(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(BgSurface)
+            .background(MaterialTheme.colorScheme.surface)
     ) {
-        // ── SERVICE TOP BAR ──────────────────────────────────────────────
+        // Pixel Top Header
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 10.dp),
+                .padding(horizontal = 8.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            IconButton(
-                onClick = onBack,
-                modifier = Modifier.size(36.dp)
-            ) {
+            IconButton(onClick = onBack) {
                 Icon(
                     Icons.AutoMirrored.Filled.ArrowBack,
                     contentDescription = "Back to Services",
-                    tint = TextPrimary
+                    tint = MaterialTheme.colorScheme.onSurface
                 )
             }
-
-            Spacer(modifier = Modifier.width(6.dp))
-
+            Spacer(modifier = Modifier.width(4.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = service.name.uppercase(),
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = TextPrimary,
-                    fontFamily = FontFamily.Monospace,
-                    letterSpacing = 0.6.sp
+                    text = service.name,
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onSurface
                 )
                 Text(
                     text = "$serverName • ${service.unit}",
-                    fontSize = 11.sp,
-                    color = TextMuted,
-                    fontFamily = FontFamily.Monospace,
+                    style = MaterialTheme.typography.bodySmall.copy(fontFamily = MonoFontFamily),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
             }
-
-            IconButton(
-                onClick = onRefresh,
-                modifier = Modifier.size(34.dp)
-            ) {
+            IconButton(onClick = onRefresh) {
                 if (isLoading) {
                     CircularProgressIndicator(
-                        modifier = Modifier.size(16.dp),
+                        modifier = Modifier.size(18.dp),
                         strokeWidth = 2.dp,
-                        color = accentColor
+                        color = MaterialTheme.colorScheme.primary
                     )
                 } else {
                     Icon(
                         Icons.Default.Refresh,
                         contentDescription = "Refresh",
-                        tint = TextSecondary,
-                        modifier = Modifier.size(20.dp)
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
@@ -593,50 +585,44 @@ fun ServiceDetailView(
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // ── SERVICE IDENTITY & TELEMETRY HERO CARD ───────────────────
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(18.dp))
-                    .background(BgCard)
-                    .border(1.dp, accentColor.copy(alpha = 0.35f), RoundedCornerShape(18.dp))
-                    .padding(16.dp)
+            // Identity Hero Card
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(28.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerHigh
             ) {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
+                Column(
+                    modifier = Modifier.padding(20.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(
                             modifier = Modifier
-                                .size(44.dp)
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(accentColor.copy(alpha = 0.14f))
-                                .border(1.dp, accentColor.copy(alpha = 0.45f), RoundedCornerShape(12.dp)),
+                                .size(48.dp)
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(MaterialTheme.colorScheme.primaryContainer),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Tune,
                                 contentDescription = null,
-                                tint = accentColor,
-                                modifier = Modifier.size(22.dp)
+                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                modifier = Modifier.size(24.dp)
                             )
                         }
-                        Spacer(modifier = Modifier.width(12.dp))
+                        Spacer(modifier = Modifier.width(14.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = service.name,
-                                fontSize = 18.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = TextPrimary
+                                style = MaterialTheme.typography.headlineSmall,
+                                color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
                                 text = service.unit,
-                                fontSize = 12.sp,
-                                color = TextSecondary,
-                                fontFamily = FontFamily.Monospace
+                                style = MaterialTheme.typography.bodyMedium.copy(fontFamily = MonoFontFamily),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
@@ -647,84 +633,72 @@ fun ServiceDetailView(
                             .horizontalScroll(rememberScrollState()),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        // State badge
-                        Row(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(stateColor.copy(alpha = 0.14f))
-                                .border(1.dp, stateColor.copy(alpha = 0.45f), RoundedCornerShape(8.dp))
-                                .padding(horizontal = 10.dp, vertical = 5.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = stateContainer
                         ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(7.dp)
-                                    .clip(CircleShape)
-                                    .background(stateColor)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = service.state.uppercase(),
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = stateColor,
-                                fontFamily = FontFamily.Monospace
+                                text = service.state.replaceFirstChar { it.uppercase() },
+                                style = MaterialTheme.typography.labelMedium,
+                                color = stateText,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                             )
                         }
 
-                        // Boot badge
-                        val bootColor = if (service.enabled) Color(0xFF38BDF8) else AmberVibrant
-                        Row(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(bootColor.copy(alpha = 0.12f))
-                                .border(1.dp, bootColor.copy(alpha = 0.4f), RoundedCornerShape(8.dp))
-                                .padding(horizontal = 10.dp, vertical = 5.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = if (service.enabled) {
+                                MaterialTheme.colorScheme.primaryContainer
+                            } else {
+                                MaterialTheme.colorScheme.surfaceContainerHighest
+                            }
                         ) {
                             Text(
-                                text = if (service.enabled) "ENABLED ON BOOT" else "DISABLED ON BOOT",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = bootColor,
-                                fontFamily = FontFamily.Monospace
+                                text = if (service.enabled) "Enabled on Boot" else "Disabled on Boot",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = if (service.enabled) {
+                                    MaterialTheme.colorScheme.onPrimaryContainer
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                },
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                             )
                         }
 
                         if (service.pid != null && service.pid > 0) {
-                            Text(
-                                text = "PID ${service.pid}",
-                                fontSize = 11.sp,
-                                color = TextSecondary,
-                                fontFamily = FontFamily.Monospace,
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(BgElevated)
-                                    .border(1.dp, BorderSubtle, RoundedCornerShape(8.dp))
-                                    .padding(horizontal = 10.dp, vertical = 5.dp)
-                            )
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = MaterialTheme.colorScheme.surfaceContainerHighest
+                            ) {
+                                Text(
+                                    text = "PID ${service.pid}",
+                                    style = MaterialTheme.typography.labelMedium.copy(fontFamily = MonoFontFamily),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                                )
+                            }
                         }
                     }
                 }
             }
 
-            // ── SECTION 1: RUNTIME LIFECYCLE CONTROLS ────────────────────
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            // Runtime Lifecycle Section
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
-                    text = "RUNTIME LIFECYCLE",
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = TextMuted,
-                    letterSpacing = 1.sp
+                    text = "Runtime Controls",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(horizontal = 4.dp)
                 )
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     ServiceControlTile(
                         label = "Start",
                         icon = Icons.Default.PlayArrow,
-                        color = GreenVibrant,
+                        containerColor = PixelSemantic.onlineContainer(dark),
+                        contentColor = PixelSemantic.onOnlineContainer(dark),
                         enabled = !isRunning,
                         onClick = { onOperate(service, ServiceOperation.START, null) },
                         modifier = Modifier.weight(1f)
@@ -732,7 +706,8 @@ fun ServiceDetailView(
                     ServiceControlTile(
                         label = "Stop",
                         icon = Icons.Default.Stop,
-                        color = RedVibrant,
+                        containerColor = MaterialTheme.colorScheme.errorContainer,
+                        contentColor = MaterialTheme.colorScheme.onErrorContainer,
                         enabled = isRunning || service.active,
                         onClick = { onOperate(service, ServiceOperation.STOP, null) },
                         modifier = Modifier.weight(1f)
@@ -740,7 +715,8 @@ fun ServiceDetailView(
                     ServiceControlTile(
                         label = "Restart",
                         icon = Icons.Default.RestartAlt,
-                        color = AmberVibrant,
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
                         enabled = true,
                         onClick = { onOperate(service, ServiceOperation.RESTART, null) },
                         modifier = Modifier.weight(1f)
@@ -748,130 +724,106 @@ fun ServiceDetailView(
                 }
             }
 
-            // ── SECTION 2: BOOT AUTO-START (SYSTEMD ENABLE / DISABLE) ────
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            // Boot Persistence Section (Pixel Android Settings Switch Tile + Action Pills)
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
-                    text = "BOOT PERSISTENCE (SYSTEMD)",
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = TextMuted,
-                    letterSpacing = 1.sp
+                    text = "Startup & Boot (systemd)",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(horizontal = 4.dp)
                 )
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(BgCard)
-                        .border(1.dp, BorderSubtle, RoundedCornerShape(16.dp))
-                        .padding(14.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(24.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainer
                 ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
+                    Column(
+                        modifier = Modifier.padding(18.dp),
+                        verticalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "Auto-Start on Boot",
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = TextPrimary
-                            )
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = if (service.enabled) {
-                                    "Unit starts automatically on server startup"
-                                } else {
-                                    "Manual start only — disabled from boot sequence"
-                                },
-                                fontSize = 11.sp,
-                                color = TextSecondary
-                            )
-                        }
-                        Switch(
-                            checked = service.enabled,
-                            onCheckedChange = { enable ->
-                                onOperate(
-                                    service,
-                                    if (enable) ServiceOperation.ENABLE else ServiceOperation.DISABLE,
-                                    null
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Start automatically on boot",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = MaterialTheme.colorScheme.onSurface
                                 )
-                            },
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = Color(0xFF38BDF8),
-                                checkedTrackColor = Color(0xFF38BDF8).copy(alpha = 0.3f),
-                                uncheckedThumbColor = TextMuted,
-                                uncheckedTrackColor = BgElevated
-                            )
-                        )
-                    }
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Button(
-                            onClick = { onOperate(service, ServiceOperation.ENABLE, null) },
-                            enabled = !service.enabled,
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = Color(0xFF38BDF8).copy(alpha = 0.16f),
-                                disabledContainerColor = BgElevated
-                            ),
-                            shape = RoundedCornerShape(10.dp),
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Icon(
-                                Icons.Default.PowerSettingsNew,
-                                contentDescription = null,
-                                tint = if (!service.enabled) Color(0xFF38BDF8) else TextMuted,
-                                modifier = Modifier.size(14.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = "Enable",
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = if (!service.enabled) Color(0xFF38BDF8) else TextMuted
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = if (service.enabled) {
+                                        "Managed unit launches automatically at host boot"
+                                    } else {
+                                        "Manual start only — won't launch on host boot"
+                                    },
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Switch(
+                                checked = service.enabled,
+                                onCheckedChange = { enable ->
+                                    onOperate(
+                                        service,
+                                        if (enable) ServiceOperation.ENABLE else ServiceOperation.DISABLE,
+                                        null
+                                    )
+                                },
+                                thumbContent = {
+                                    Icon(
+                                        imageVector = if (service.enabled) Icons.Default.Check else Icons.Default.Close,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(SwitchDefaults.IconSize)
+                                    )
+                                }
                             )
                         }
 
-                        Button(
-                            onClick = { onOperate(service, ServiceOperation.DISABLE, null) },
-                            enabled = service.enabled,
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = RedVibrant.copy(alpha = 0.15f),
-                                disabledContainerColor = BgElevated
-                            ),
-                            shape = RoundedCornerShape(10.dp),
-                            modifier = Modifier.weight(1f)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
-                            Icon(
-                                Icons.Default.PowerSettingsNew,
-                                contentDescription = null,
-                                tint = if (service.enabled) RedVibrant else TextMuted,
-                                modifier = Modifier.size(14.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = "Disable",
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = if (service.enabled) RedVibrant else TextMuted
-                            )
+                            FilledTonalButton(
+                                onClick = { onOperate(service, ServiceOperation.ENABLE, null) },
+                                enabled = !service.enabled,
+                                shape = RoundedCornerShape(16.dp),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Icon(Icons.Default.PowerSettingsNew, null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Enable on Boot")
+                            }
+
+                            FilledTonalButton(
+                                onClick = { onOperate(service, ServiceOperation.DISABLE, null) },
+                                enabled = service.enabled,
+                                colors = ButtonDefaults.filledTonalButtonColors(
+                                    containerColor = MaterialTheme.colorScheme.errorContainer,
+                                    contentColor = MaterialTheme.colorScheme.onErrorContainer
+                                ),
+                                shape = RoundedCornerShape(16.dp),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Icon(Icons.Default.PowerSettingsNew, null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Disable")
+                            }
                         }
                     }
                 }
             }
 
-            // ── SECTION 3: PENDING SCHEDULED ACTIONS ─────────────────────
+            // Pending Scheduled Actions
             if (serviceTasks.isNotEmpty()) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
-                        text = "PENDING SCHEDULED ACTIONS (${serviceTasks.size})",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = AmberVibrant,
-                        letterSpacing = 1.sp
+                        text = "Pending Scheduled Actions (${serviceTasks.size})",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.tertiary,
+                        modifier = Modifier.padding(horizontal = 4.dp)
                     )
                     serviceTasks.forEach { task ->
                         ScheduledTaskCard(task = task, onCancel = onCancelTask)
@@ -879,154 +831,110 @@ fun ServiceDetailView(
                 }
             }
 
-            // ── SECTION 4: SCHEDULE DELAYED ACTION ───────────────────────
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            // Schedule Delayed Execution Section
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
-                    text = "SCHEDULE DELAYED EXECUTION",
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = TextMuted,
-                    letterSpacing = 1.sp
+                    text = "Schedule Delayed Action",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(horizontal = 4.dp)
                 )
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(BgCard)
-                        .border(1.dp, BorderSubtle, RoundedCornerShape(16.dp))
-                        .padding(14.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(24.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainer
                 ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    Column(
+                        modifier = Modifier.padding(18.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        listOf(
-                            ServiceOperation.START,
-                            ServiceOperation.STOP,
-                            ServiceOperation.RESTART,
-                            ServiceOperation.ENABLE,
-                            ServiceOperation.DISABLE
-                        ).forEach { op ->
-                            val isSelected = selectedDelayOp == op
-                            val opColor = when (op) {
-                                ServiceOperation.START -> GreenVibrant
-                                ServiceOperation.STOP, ServiceOperation.DISABLE -> RedVibrant
-                                ServiceOperation.RESTART -> AmberVibrant
-                                ServiceOperation.ENABLE -> Color(0xFF38BDF8)
-                            }
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(9.dp))
-                                    .background(if (isSelected) opColor.copy(alpha = 0.2f) else BgElevated)
-                                    .border(
-                                        1.dp,
-                                        if (isSelected) opColor else BorderSubtle,
-                                        RoundedCornerShape(9.dp)
-                                    )
-                                    .clickable { selectedDelayOp = op }
-                                    .padding(horizontal = 11.dp, vertical = 7.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = op.name,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (isSelected) opColor else TextSecondary
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            listOf(
+                                ServiceOperation.START,
+                                ServiceOperation.STOP,
+                                ServiceOperation.RESTART,
+                                ServiceOperation.ENABLE,
+                                ServiceOperation.DISABLE
+                            ).forEach { op ->
+                                FilterChip(
+                                    selected = selectedDelayOp == op,
+                                    onClick = { selectedDelayOp = op },
+                                    label = {
+                                        Text(
+                                            op.name.lowercase().replaceFirstChar { it.uppercase() },
+                                            style = MaterialTheme.typography.labelMedium
+                                        )
+                                    }
                                 )
                             }
                         }
-                    }
 
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        presetSeconds.forEach { (sec, label) ->
-                            val isSelected = selectedDelaySeconds == sec && customMinutesText.isBlank()
-                            Box(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(if (isSelected) accentColor.copy(alpha = 0.2f) else BgElevated)
-                                    .border(
-                                        1.dp,
-                                        if (isSelected) accentColor else BorderSubtle,
-                                        RoundedCornerShape(8.dp)
-                                    )
-                                    .clickable {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            presetSeconds.forEach { (sec, label) ->
+                                FilterChip(
+                                    selected = selectedDelaySeconds == sec && customMinutesText.isBlank(),
+                                    onClick = {
                                         selectedDelaySeconds = sec
                                         customMinutesText = ""
-                                    }
-                                    .padding(vertical = 8.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = label,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (isSelected) accentColor else TextSecondary
+                                    },
+                                    label = { Text(label, style = MaterialTheme.typography.labelMedium) }
                                 )
                             }
                         }
-                    }
 
-                    OutlinedTextField(
-                        value = customMinutesText,
-                        onValueChange = {
-                            val clean = it.filter { ch -> ch.isDigit() }
-                            customMinutesText = clean
-                            clean.toLongOrNull()?.let { m ->
-                                if (m > 0) selectedDelaySeconds = m * 60L
-                            }
-                        },
-                        label = { Text("Or custom delay (minutes)") },
-                        singleLine = true,
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = accentColor,
-                            unfocusedBorderColor = BorderDefault,
-                            cursorColor = accentColor,
-                            focusedLabelColor = accentColor,
-                            focusedTextColor = TextPrimary,
-                            unfocusedTextColor = TextPrimary
-                        ),
-                        shape = RoundedCornerShape(10.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                        OutlinedTextField(
+                            value = customMinutesText,
+                            onValueChange = {
+                                val clean = it.filter { ch -> ch.isDigit() }
+                                customMinutesText = clean
+                                clean.toLongOrNull()?.let { m ->
+                                    if (m > 0) selectedDelaySeconds = m * 60L
+                                }
+                            },
+                            label = { Text("Custom delay (minutes)") },
+                            singleLine = true,
+                            shape = RoundedCornerShape(16.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = MaterialTheme.colorScheme.primary,
+                                unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        )
 
-                    val delayDisplay = if (selectedDelaySeconds < 60) {
-                        "${selectedDelaySeconds}s"
-                    } else {
-                        "${selectedDelaySeconds / 60}m"
-                    }
-                    Button(
-                        onClick = {
-                            if (selectedDelaySeconds > 0) {
-                                onOperate(service, selectedDelayOp, selectedDelaySeconds)
-                            }
-                        },
-                        enabled = selectedDelaySeconds > 0,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = accentColor.copy(alpha = 0.2f)
-                        ),
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Icon(
-                            Icons.Default.MoreTime,
-                            contentDescription = null,
-                            tint = accentColor,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "Schedule ${selectedDelayOp.displayName} in $delayDisplay",
-                            color = accentColor,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 13.sp
-                        )
+                        val delayDisplay = if (selectedDelaySeconds < 60) {
+                            "${selectedDelaySeconds}s"
+                        } else {
+                            "${selectedDelaySeconds / 60}m"
+                        }
+                        Button(
+                            onClick = {
+                                if (selectedDelaySeconds > 0) {
+                                    onOperate(service, selectedDelayOp, selectedDelaySeconds)
+                                }
+                            },
+                            enabled = selectedDelaySeconds > 0,
+                            shape = RoundedCornerShape(16.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(48.dp)
+                        ) {
+                            Icon(Icons.Default.MoreTime, null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Schedule ${selectedDelayOp.displayName} in $delayDisplay",
+                                style = MaterialTheme.typography.labelLarge
+                            )
+                        }
                     }
                 }
             }
@@ -1040,37 +948,36 @@ fun ServiceDetailView(
 private fun ServiceControlTile(
     label: String,
     icon: ImageVector,
-    color: Color,
+    containerColor: Color,
+    contentColor: Color,
     enabled: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Column(
+    Surface(
         modifier = modifier
-            .clip(RoundedCornerShape(14.dp))
-            .background(if (enabled) color.copy(alpha = 0.12f) else BgCard)
-            .border(
-                1.dp,
-                if (enabled) color.copy(alpha = 0.38f) else BorderSubtle,
-                RoundedCornerShape(14.dp)
-            )
-            .clickable(enabled = enabled, onClick = onClick)
-            .padding(vertical = 14.dp, horizontal = 8.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(5.dp)
+            .clip(RoundedCornerShape(20.dp))
+            .clickable(enabled = enabled, onClick = onClick),
+        shape = RoundedCornerShape(20.dp),
+        color = if (enabled) containerColor else MaterialTheme.colorScheme.surfaceContainerLow
     ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = label,
-            tint = if (enabled) color else TextMuted.copy(alpha = 0.5f),
-            modifier = Modifier.size(22.dp)
-        )
-        Text(
-            text = label,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Bold,
-            color = if (enabled) color else TextMuted.copy(alpha = 0.55f)
-        )
+        Column(
+            modifier = Modifier.padding(vertical = 16.dp, horizontal = 8.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = label,
+                tint = if (enabled) contentColor else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f),
+                modifier = Modifier.size(24.dp)
+            )
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelLarge,
+                color = if (enabled) contentColor else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f)
+            )
+        }
     }
 }
 
@@ -1080,16 +987,16 @@ fun ScheduledTaskCard(
     onCancel: (ScheduledTask) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Box(
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
-            .background(BgElevated)
-            .border(1.dp, AmberVibrant.copy(alpha = 0.4f), RoundedCornerShape(14.dp))
-            .padding(12.dp)
+    val dark = LocalIsDarkTheme.current
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        color = PixelSemantic.warningContainer(dark)
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
@@ -1100,22 +1007,20 @@ fun ScheduledTaskCard(
                 Icon(
                     Icons.Default.Schedule,
                     contentDescription = null,
-                    tint = AmberVibrant,
-                    modifier = Modifier.size(18.dp)
+                    tint = PixelSemantic.onWarningContainer(dark),
+                    modifier = Modifier.size(20.dp)
                 )
-                Spacer(modifier = Modifier.width(10.dp))
+                Spacer(modifier = Modifier.width(12.dp))
                 Column {
                     Text(
-                        text = "Scheduled ${task.operation.uppercase()}: ${task.serviceName}",
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = TextPrimary
+                        text = "${task.operation.replaceFirstChar { it.uppercase() }}: ${task.serviceName}",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = PixelSemantic.onWarningContainer(dark)
                     )
                     Text(
                         text = "Fires in ${task.delaySeconds}s • ${task.executeAt}",
-                        fontSize = 11.sp,
-                        color = TextSecondary,
-                        fontFamily = FontFamily.Monospace,
+                        style = MaterialTheme.typography.bodySmall.copy(fontFamily = MonoFontFamily),
+                        color = PixelSemantic.onWarningContainer(dark).copy(alpha = 0.8f),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -1127,15 +1032,11 @@ fun ScheduledTaskCard(
                 task.status.equals("scheduled", ignoreCase = true)
 
             if (isCancellable) {
-                IconButton(
-                    onClick = { onCancel(task) },
-                    modifier = Modifier.size(32.dp)
-                ) {
+                IconButton(onClick = { onCancel(task) }) {
                     Icon(
                         Icons.Default.Close,
                         contentDescription = "Cancel Task",
-                        tint = RedVibrant,
-                        modifier = Modifier.size(18.dp)
+                        tint = PixelSemantic.onWarningContainer(dark)
                     )
                 }
             }

@@ -38,6 +38,20 @@ class AppSettingsTest {
         assertTrue(settings.isBiometricEnabled)
         assertTrue(settings.isBackgroundMonitoringEnabled)
         assertFalse(settings.isWidgetBiometricEnabled)
+        assertEquals(ThemeMode.SYSTEM, settings.themeMode)
+        assertTrue(settings.isDynamicColorEnabled)
+    }
+
+    @Test
+    fun themePreferences_persistCorrectly() {
+        settings.themeMode = ThemeMode.LIGHT
+        assertEquals(ThemeMode.LIGHT, settings.themeMode)
+
+        settings.themeMode = ThemeMode.DARK
+        assertEquals(ThemeMode.DARK, settings.themeMode)
+
+        settings.isDynamicColorEnabled = false
+        assertFalse(settings.isDynamicColorEnabled)
     }
 
     @Test

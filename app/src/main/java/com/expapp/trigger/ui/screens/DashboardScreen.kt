@@ -3,7 +3,6 @@ package com.expapp.trigger.ui.screens
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -28,16 +27,18 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilledTonalIconButton
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -50,14 +51,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.expapp.trigger.data.model.DeviceConfig
 import com.expapp.trigger.data.model.ScheduledTask
 import com.expapp.trigger.data.model.ServiceOperation
 import com.expapp.trigger.data.model.SysPulseStatus
+import com.expapp.trigger.data.model.SysServiceInfo
 import com.expapp.trigger.network.NodeStatus
 import com.expapp.trigger.network.SysPulseClient
 import com.expapp.trigger.network.TriggerAction
@@ -66,16 +65,9 @@ import com.expapp.trigger.ui.components.DisksCard
 import com.expapp.trigger.ui.components.ScheduledTaskCard
 import com.expapp.trigger.ui.components.ServiceDetailView
 import com.expapp.trigger.ui.components.ServiceListRow
-import com.expapp.trigger.ui.theme.AmberVibrant
-import com.expapp.trigger.ui.theme.BgCard
-import com.expapp.trigger.ui.theme.BgElevated
-import com.expapp.trigger.ui.theme.BgSurface
-import com.expapp.trigger.ui.theme.BorderSubtle
-import com.expapp.trigger.ui.theme.GreenVibrant
-import com.expapp.trigger.ui.theme.RedVibrant
-import com.expapp.trigger.ui.theme.TextMuted
-import com.expapp.trigger.ui.theme.TextPrimary
-import com.expapp.trigger.ui.theme.TextSecondary
+import com.expapp.trigger.ui.theme.LocalIsDarkTheme
+import com.expapp.trigger.ui.theme.MonoFontFamily
+import com.expapp.trigger.ui.theme.PixelSemantic
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 
@@ -83,13 +75,16 @@ import kotlinx.coroutines.isActive
 fun DashboardScreen(
     device: DeviceConfig,
     nodeStatus: NodeStatus?,
-    accentColor: Color = GreenVibrant,
-    onBack: () -> Unit,
+    accentColor: Color = MaterialTheme.colorScheme.primary,
+    showBackButton: Boolean = true,
+    onBack: () -> Unit = {},
     onTriggerPowerAction: ((TriggerAction) -> Unit)? = null,
     onRequireBiometric: ((title: String, subtitle: String, onAuthorized: () -> Unit) -> Unit)? = null,
+    onServiceDetailVisibilityChanged: (Boolean) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val dark = LocalIsDarkTheme.current
     val sysPulseClient = remember { SysPulseClient() }
 
     val effectiveUrl = remember(device, nodeStatus) {
@@ -99,15 +94,19 @@ fun DashboardScreen(
         sysPulseClient.resolveSecretKey(device)
     }
 
-    var pulseStatus by remember { mutableStateOf<SysPulseStatus?>(null) }
-    var scheduledTasks by remember { mutableStateOf<List<ScheduledTask>>(emptyList()) }
-    var isLoading by remember { mutableStateOf(true) }
+    var pulseStatus by remember(device.id) { mutableStateOf<SysPulseStatus?>(null) }
+    var scheduledTasks by remember(device.id) { mutableStateOf<List<ScheduledTask>>(emptyList()) }
+    var isLoading by remember(device.id) { mutableStateOf(true) }
     var isPollingActive by remember { mutableStateOf(true) }
-    var errorMessage by remember { mutableStateOf<String?>(null) }
+    var errorMessage by remember(device.id) { mutableStateOf<String?>(null) }
 
-    var selectedServiceName by remember { mutableStateOf<String?>(null) }
+    var selectedServiceName by remember(device.id) { mutableStateOf<String?>(null) }
     var searchQuery by remember { mutableStateOf("") }
-    var filterMode by remember { mutableStateOf("ALL") } // ALL, RUNNING, STOPPED, BOOT ON, BOOT OFF
+    var filterMode by remember { mutableStateOf("ALL") }
+
+    LaunchedEffect(selectedServiceName) {
+        onServiceDetailVisibilityChanged(selectedServiceName != null)
+    }
 
     fun refreshData(showIndicator: Boolean = false) {
         if (effectiveUrl.isBlank()) {
@@ -138,7 +137,6 @@ fun DashboardScreen(
         }
     }
 
-    // Active polling loop every 3 seconds while screen is displayed
     LaunchedEffect(effectiveUrl, effectiveSecret, isPollingActive) {
         if (effectiveUrl.isBlank()) return@LaunchedEffect
         while (isActive && isPollingActive) {
@@ -148,7 +146,7 @@ fun DashboardScreen(
     }
 
     fun handleServiceOperation(
-        service: com.expapp.trigger.data.model.SysServiceInfo,
+        service: SysServiceInfo,
         op: ServiceOperation,
         delaySec: Long? = null
     ) {
@@ -191,8 +189,7 @@ fun DashboardScreen(
         }
     }
 
-    // Back gesture handling: from ServiceDetailView back to SysPulse, or SysPulse back to Power Control
-    BackHandler(enabled = true) {
+    BackHandler(enabled = selectedServiceName != null || showBackButton) {
         if (selectedServiceName != null) {
             selectedServiceName = null
         } else {
@@ -204,7 +201,6 @@ fun DashboardScreen(
         ServiceDetailView(
             service = activeSelectedService,
             serverName = device.name,
-            accentColor = accentColor,
             isLoading = isLoading,
             serviceTasks = scheduledTasks.filter {
                 it.serviceName.equals(activeSelectedService.name, ignoreCase = true)
@@ -232,192 +228,224 @@ fun DashboardScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(BgSurface)
+            .background(MaterialTheme.colorScheme.surface)
     ) {
-        // ── TOP APP BAR ──────────────────────────────────────────────────
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            IconButton(
-                onClick = onBack,
-                modifier = Modifier.size(36.dp)
+        if (showBackButton) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(
-                    Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "Back",
-                    tint = TextPrimary
-                )
-            }
-
-            Spacer(modifier = Modifier.width(6.dp))
-
-            Column(modifier = Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        modifier = Modifier
-                            .size(8.dp)
-                            .clip(CircleShape)
-                            .background(accentColor)
-                    )
-                    Spacer(modifier = Modifier.width(7.dp))
-                    Text(
-                        text = "${device.name} • SYSPULSE",
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = TextPrimary,
-                        fontFamily = FontFamily.Monospace,
-                        letterSpacing = 0.6.sp
+                IconButton(onClick = onBack) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Back",
+                        tint = MaterialTheme.colorScheme.onSurface
                     )
                 }
-                Text(
-                    text = if (effectiveUrl.isNotBlank()) effectiveUrl else "SysPulse API Offline",
-                    fontSize = 11.sp,
-                    color = TextMuted,
-                    fontFamily = FontFamily.Monospace,
-                    maxLines = 1
-                )
-            }
-
-            // Live Polling Toggle Pill
-            IconButton(
-                onClick = { isPollingActive = !isPollingActive },
-                modifier = Modifier.size(34.dp)
-            ) {
-                Icon(
-                    imageVector = if (isPollingActive) Icons.Default.Pause else Icons.Default.PlayArrow,
-                    contentDescription = if (isPollingActive) "Pause Polling" else "Resume Polling",
-                    tint = if (isPollingActive) accentColor else TextMuted,
-                    modifier = Modifier.size(19.dp)
-                )
-            }
-
-            // Manual Refresh Button
-            IconButton(
-                onClick = { refreshData(showIndicator = true) },
-                modifier = Modifier.size(34.dp)
-            ) {
-                if (isLoading) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(16.dp),
-                        strokeWidth = 2.dp,
-                        color = accentColor
+                Spacer(modifier = Modifier.width(4.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "${device.name} • SysPulse",
+                        style = MaterialTheme.typography.titleLarge,
+                        color = MaterialTheme.colorScheme.onSurface
                     )
-                } else {
+                    Text(
+                        text = if (effectiveUrl.isNotBlank()) effectiveUrl else "SysPulse offline",
+                        style = MaterialTheme.typography.bodySmall.copy(fontFamily = MonoFontFamily),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1
+                    )
+                }
+                FilledTonalIconButton(onClick = { isPollingActive = !isPollingActive }) {
                     Icon(
-                        Icons.Default.Refresh,
-                        contentDescription = "Refresh",
-                        tint = TextSecondary,
-                        modifier = Modifier.size(19.dp)
+                        imageVector = if (isPollingActive) Icons.Default.Pause else Icons.Default.PlayArrow,
+                        contentDescription = if (isPollingActive) "Pause Polling" else "Resume Polling",
+                        modifier = Modifier.size(18.dp)
                     )
+                }
+                Spacer(modifier = Modifier.width(4.dp))
+                IconButton(onClick = { refreshData(showIndicator = true) }) {
+                    if (isLoading) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    } else {
+                        Icon(
+                            Icons.Default.Refresh,
+                            contentDescription = "Refresh",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             }
         }
 
-        // ── DASHBOARD BODY ───────────────────────────────────────────────
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(scrollState)
-                .padding(horizontal = 16.dp, vertical = 6.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // ── HOST UPTIME & POLLING STRIP ──────────────────────────────
+            // Host Uptime & Live Poll Strip
             val status = pulseStatus
             if (status != null) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(BgCard)
-                        .border(1.dp, BorderSubtle, RoundedCornerShape(12.dp))
-                        .padding(horizontal = 14.dp, vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
+                val isPulseError = errorMessage != null
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(20.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            modifier = Modifier
-                                .size(7.dp)
-                                .clip(CircleShape)
-                                .background(accentColor)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "UPTIME",
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = TextMuted,
-                            letterSpacing = 0.8.sp
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = status.uptime,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = TextPrimary,
-                            fontFamily = FontFamily.Monospace
-                        )
-                    }
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(9.dp)
+                                    .clip(CircleShape)
+                                    .background(PixelSemantic.onlineAccent(dark))
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column {
+                                Text(
+                                    text = "Up ${status.uptime}",
+                                    style = MaterialTheme.typography.titleSmall.copy(fontFeatureSettings = "tnum"),
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = effectiveUrl,
+                                    style = MaterialTheme.typography.bodySmall.copy(fontFamily = MonoFontFamily),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1
+                                )
+                            }
+                        }
 
-                    val isPulseError = errorMessage != null
-                    Text(
-                        text = if (!isPollingActive) "PAUSED" else if (isPulseError) "RETRYING" else "LIVE 3s",
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = if (!isPollingActive) AmberVibrant else if (isPulseError) RedVibrant else accentColor,
-                        fontFamily = FontFamily.Monospace
-                    )
-                }
-            }
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = when {
+                                    !isPollingActive -> MaterialTheme.colorScheme.surfaceContainerHighest
+                                    isPulseError -> MaterialTheme.colorScheme.errorContainer
+                                    else -> MaterialTheme.colorScheme.primaryContainer
+                                },
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .clickable { isPollingActive = !isPollingActive }
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = if (isPollingActive) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                        contentDescription = null,
+                                        tint = when {
+                                            !isPollingActive -> MaterialTheme.colorScheme.onSurfaceVariant
+                                            isPulseError -> MaterialTheme.colorScheme.onErrorContainer
+                                            else -> MaterialTheme.colorScheme.onPrimaryContainer
+                                        },
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = if (!isPollingActive) "Paused" else if (isPulseError) "Retrying" else "Live 3s",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = when {
+                                            !isPollingActive -> MaterialTheme.colorScheme.onSurfaceVariant
+                                            isPulseError -> MaterialTheme.colorScheme.onErrorContainer
+                                            else -> MaterialTheme.colorScheme.onPrimaryContainer
+                                        }
+                                    )
+                                }
+                            }
 
-            // Offline / Unreachable State
-            if (status == null && !isLoading) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(18.dp))
-                        .background(BgCard)
-                        .border(1.dp, BorderSubtle, RoundedCornerShape(18.dp))
-                        .padding(24.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Icon(
-                        Icons.Default.CloudOff,
-                        contentDescription = null,
-                        tint = RedVibrant,
-                        modifier = Modifier.size(42.dp)
-                    )
-                    Text(
-                        text = "SysPulse Daemon Unreachable",
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = TextPrimary
-                    )
-                    Text(
-                        text = errorMessage ?: "The server may be offline or SysPulse is not running at $effectiveUrl.",
-                        fontSize = 12.sp,
-                        color = TextSecondary
-                    )
-                    if (onTriggerPowerAction != null && nodeStatus?.isOnline != true) {
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Button(
-                            onClick = { onTriggerPowerAction(TriggerAction.POWER_ON) },
-                            colors = ButtonDefaults.buttonColors(containerColor = GreenVibrant),
-                            shape = RoundedCornerShape(12.dp)
-                        ) {
-                            Icon(Icons.Default.PowerSettingsNew, null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Wake Server Now", fontWeight = FontWeight.Bold)
+                            if (!showBackButton) {
+                                IconButton(
+                                    onClick = { refreshData(showIndicator = true) },
+                                    modifier = Modifier.size(32.dp)
+                                ) {
+                                    if (isLoading) {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(16.dp),
+                                            strokeWidth = 2.dp,
+                                            color = MaterialTheme.colorScheme.primary
+                                        )
+                                    } else {
+                                        Icon(
+                                            Icons.Default.Refresh,
+                                            contentDescription = "Refresh",
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
                 }
             }
 
-            // ── HARDWARE METRICS (2-COLUMN CPU/RAM + DISKS) ──────────────
+            // Unreachable State
+            if (status == null && !isLoading) {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(28.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainer
+                ) {
+                    Column(
+                        modifier = Modifier.padding(28.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(56.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.errorContainer),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                Icons.Default.CloudOff,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onErrorContainer,
+                                modifier = Modifier.size(28.dp)
+                            )
+                        }
+                        Text(
+                            text = "SysPulse Unreachable",
+                            style = MaterialTheme.typography.titleLarge,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = errorMessage ?: "Server may be powered off or SysPulse is stopped at $effectiveUrl.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        if (onTriggerPowerAction != null && nodeStatus?.isOnline != true) {
+                            Button(
+                                onClick = { onTriggerPowerAction(TriggerAction.POWER_ON) },
+                                shape = RoundedCornerShape(16.dp)
+                            ) {
+                                Icon(Icons.Default.PowerSettingsNew, null, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Wake Server Now")
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Hardware Compute & Storage Cards
             if (status != null) {
                 ComputeOverviewGrid(cpu = status.cpu, ram = status.ram)
 
@@ -426,29 +454,15 @@ fun DashboardScreen(
                 }
             }
 
-            // ── PENDING SCHEDULED TASKS ──────────────────────────────────
+            // Pending Tasks
             if (scheduledTasks.isNotEmpty()) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            Icons.Default.Schedule,
-                            contentDescription = null,
-                            tint = AmberVibrant,
-                            modifier = Modifier.size(15.dp)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = "PENDING TASKS (${scheduledTasks.size})",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = TextSecondary,
-                            letterSpacing = 0.8.sp
-                        )
-                    }
-
+                    Text(
+                        text = "Scheduled Tasks (${scheduledTasks.size})",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(horizontal = 4.dp)
+                    )
                     scheduledTasks.forEach { task ->
                         ScheduledTaskCard(
                             task = task,
@@ -467,74 +481,65 @@ fun DashboardScreen(
                 }
             }
 
-            // ── CLEAN SERVICE DIRECTORY (NO CLUTTERED INLINE BUTTONS) ────
+            // Services Directory (Android Settings-style Grouped List)
             if (status != null && status.services.isNotEmpty()) {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Text(
-                            text = "SERVICES",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = TextMuted,
-                            letterSpacing = 1.sp
+                            text = "Services",
+                            style = MaterialTheme.typography.titleLarge,
+                            color = MaterialTheme.colorScheme.onSurface
                         )
-                        Spacer(modifier = Modifier.weight(1f))
                         val runningCount = status.services.count { it.active }
                         val bootCount = status.services.count { it.enabled }
                         Text(
-                            text = "$runningCount/${status.services.size} active  ·  $bootCount boot",
-                            fontSize = 11.sp,
-                            color = accentColor,
-                            fontFamily = FontFamily.Monospace
+                            text = "$runningCount/${status.services.size} active • $bootCount boot",
+                            style = MaterialTheme.typography.labelMedium.copy(fontFeatureSettings = "tnum"),
+                            color = MaterialTheme.colorScheme.primary
                         )
                     }
 
+                    // Pill Search Field
                     OutlinedTextField(
                         value = searchQuery,
                         onValueChange = { searchQuery = it },
-                        placeholder = { Text("Search services or systemd unit...", fontSize = 12.sp) },
+                        placeholder = { Text("Search services or systemd unit") },
                         singleLine = true,
-                        leadingIcon = { Icon(Icons.Default.Search, null, modifier = Modifier.size(16.dp)) },
+                        leadingIcon = { Icon(Icons.Default.Search, null, modifier = Modifier.size(18.dp)) },
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = accentColor,
-                            unfocusedBorderColor = BorderSubtle,
-                            cursorColor = accentColor,
-                            focusedTextColor = TextPrimary,
-                            unfocusedTextColor = TextPrimary
+                            focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                            focusedBorderColor = Color.Transparent,
+                            unfocusedBorderColor = Color.Transparent
                         ),
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(48.dp)
+                        shape = RoundedCornerShape(28.dp),
+                        modifier = Modifier.fillMaxWidth()
                     )
 
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        listOf("ALL", "RUNNING", "STOPPED", "BOOT ON", "BOOT OFF").forEach { mode ->
-                            val isSelected = filterMode == mode
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(9.dp))
-                                    .background(if (isSelected) accentColor.copy(alpha = 0.16f) else BgElevated)
-                                    .border(1.dp, if (isSelected) accentColor else BorderSubtle, RoundedCornerShape(9.dp))
-                                    .clickable { filterMode = mode }
-                                    .padding(horizontal = 10.dp, vertical = 6.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = mode,
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (isSelected) accentColor else TextSecondary
-                                )
-                            }
+                        listOf(
+                            "ALL" to "All",
+                            "RUNNING" to "Running",
+                            "STOPPED" to "Stopped",
+                            "BOOT ON" to "Boot On",
+                            "BOOT OFF" to "Boot Off"
+                        ).forEach { (key, label) ->
+                            FilterChip(
+                                selected = filterMode == key,
+                                onClick = { filterMode = key },
+                                label = { Text(label, style = MaterialTheme.typography.labelMedium) }
+                            )
                         }
                     }
 
@@ -556,32 +561,33 @@ fun DashboardScreen(
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(vertical = 18.dp),
+                                .padding(vertical = 24.dp),
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                text = "No services matching current filter",
-                                fontSize = 12.sp,
-                                color = TextMuted
+                                text = "No services match the current filter",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     } else {
-                        // Single cohesive enterprise container with clean dividers & zero inline clutter
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(16.dp))
-                                .background(BgCard)
-                                .border(1.dp, BorderSubtle, RoundedCornerShape(16.dp))
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(24.dp),
+                            color = MaterialTheme.colorScheme.surfaceContainer
                         ) {
-                            filteredServices.forEachIndexed { index, service ->
-                                ServiceListRow(
-                                    service = service,
-                                    accentColor = accentColor,
-                                    onOpenService = { s -> selectedServiceName = s.name }
-                                )
-                                if (index < filteredServices.lastIndex) {
-                                    HorizontalDivider(color = BorderSubtle.copy(alpha = 0.7f))
+                            Column {
+                                filteredServices.forEachIndexed { index, service ->
+                                    ServiceListRow(
+                                        service = service,
+                                        onOpenService = { s -> selectedServiceName = s.name }
+                                    )
+                                    if (index < filteredServices.lastIndex) {
+                                        HorizontalDivider(
+                                            modifier = Modifier.padding(horizontal = 16.dp),
+                                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                                        )
+                                    }
                                 }
                             }
                         }

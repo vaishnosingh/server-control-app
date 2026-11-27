@@ -1,7 +1,6 @@
 package com.expapp.trigger.ui.components
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,41 +10,42 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PowerOff
 import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.RestartAlt
-import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.expapp.trigger.network.TriggerAction
-import com.expapp.trigger.ui.theme.AmberBorder
-import com.expapp.trigger.ui.theme.AmberVibrant
-import com.expapp.trigger.ui.theme.BgElevated
-import com.expapp.trigger.ui.theme.BgSurface
-import com.expapp.trigger.ui.theme.BorderDefault
-import com.expapp.trigger.ui.theme.GreenVibrant
-import com.expapp.trigger.ui.theme.RedBorder
-import com.expapp.trigger.ui.theme.RedVibrant
-import com.expapp.trigger.ui.theme.TextMuted
-import com.expapp.trigger.ui.theme.TextPrimary
-import com.expapp.trigger.ui.theme.TextSecondary
+import com.expapp.trigger.ui.theme.LocalIsDarkTheme
+import com.expapp.trigger.ui.theme.PixelSemantic
+
+private data class ConfirmStyle(
+    val actionName: String,
+    val icon: ImageVector,
+    val iconBg: Color,
+    val iconTint: Color,
+    val confirmBg: Color,
+    val confirmContent: Color,
+    val description: String
+)
 
 @Composable
 fun ActionConfirmDialog(
@@ -54,127 +54,117 @@ fun ActionConfirmDialog(
     onConfirm: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    val (actionName, actionIcon, accentColor, bgGradient, description) = when (action) {
-        TriggerAction.POWER_ON -> Quintuple(
-            "Power On", Icons.Default.PowerSettingsNew, GreenVibrant,
-            listOf(Color(0xFF071A0F), Color(0xFF0C1118)),
-            "This will send a wake signal to boot the remote machine."
+    val dark = LocalIsDarkTheme.current
+    val style = when (action) {
+        TriggerAction.POWER_ON -> ConfirmStyle(
+            actionName = "Power On",
+            icon = Icons.Default.PowerSettingsNew,
+            iconBg = PixelSemantic.onlineContainer(dark),
+            iconTint = PixelSemantic.onOnlineContainer(dark),
+            confirmBg = PixelSemantic.onlineContainer(dark),
+            confirmContent = PixelSemantic.onOnlineContainer(dark),
+            description = "This will send a wake signal to boot the remote machine."
         )
-        TriggerAction.POWER_OFF -> Quintuple(
-            "Power Off", Icons.Default.PowerOff, RedVibrant,
-            listOf(Color(0xFF1A0007), Color(0xFF0C1118)),
-            "This will shut down the remote machine. All running processes will stop."
+        TriggerAction.REBOOT -> ConfirmStyle(
+            actionName = "Reboot",
+            icon = Icons.Default.RestartAlt,
+            iconBg = PixelSemantic.warningContainer(dark),
+            iconTint = PixelSemantic.onWarningContainer(dark),
+            confirmBg = PixelSemantic.warningContainer(dark),
+            confirmContent = PixelSemantic.onWarningContainer(dark),
+            description = "This will restart the remote machine. Active sessions will be interrupted."
         )
-        TriggerAction.REBOOT -> Quintuple(
-            "Reboot", Icons.Default.RestartAlt, AmberVibrant,
-            listOf(Color(0xFF191000), Color(0xFF0C1118)),
-            "This will gracefully restart the remote machine."
+        TriggerAction.POWER_OFF -> ConfirmStyle(
+            actionName = "Power Off",
+            icon = Icons.Default.PowerOff,
+            iconBg = MaterialTheme.colorScheme.errorContainer,
+            iconTint = MaterialTheme.colorScheme.onErrorContainer,
+            confirmBg = MaterialTheme.colorScheme.error,
+            confirmContent = MaterialTheme.colorScheme.onError,
+            description = "This will shut down the remote machine. All running processes will stop."
         )
     }
 
     Dialog(onDismissRequest = onDismiss) {
-        Box(
-            modifier = Modifier
-                .clip(RoundedCornerShape(24.dp))
-                .background(
-                    brush = Brush.verticalGradient(bgGradient)
-                )
-                .border(1.dp, accentColor.copy(alpha = 0.25f), RoundedCornerShape(24.dp))
-                .padding(28.dp)
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(28.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            tonalElevation = 6.dp
         ) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                // Icon circle
+            Column(
+                modifier = Modifier.padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
                 Box(
                     modifier = Modifier
-                        .size(64.dp)
-                        .background(
-                            brush = Brush.radialGradient(
-                                listOf(accentColor.copy(alpha = 0.2f), Color.Transparent)
-                            ),
-                            shape = CircleShape
-                        )
-                        .border(1.dp, accentColor.copy(alpha = 0.4f), CircleShape),
+                        .size(60.dp)
+                        .clip(CircleShape)
+                        .background(style.iconBg),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        imageVector = actionIcon,
-                        contentDescription = actionName,
-                        tint = accentColor,
+                        imageVector = style.icon,
+                        contentDescription = null,
+                        tint = style.iconTint,
                         modifier = Modifier.size(30.dp)
                     )
                 }
 
-                Spacer(modifier = Modifier.height(20.dp))
+                Spacer(modifier = Modifier.height(16.dp))
 
                 Text(
-                    text = "Confirm $actionName",
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = TextPrimary
+                    text = "Confirm ${style.actionName}",
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    textAlign = TextAlign.Center
                 )
 
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(6.dp))
 
                 Text(
                     text = deviceName,
-                    fontSize = 13.sp,
-                    color = accentColor,
-                    fontWeight = FontWeight.SemiBold
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.SemiBold,
+                    textAlign = TextAlign.Center
                 )
 
-                Spacer(modifier = Modifier.height(14.dp))
+                Spacer(modifier = Modifier.height(10.dp))
 
                 Text(
-                    text = description,
-                    fontSize = 13.sp,
-                    color = TextSecondary,
-                    lineHeight = 20.sp
+                    text = style.description,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center
                 )
 
-                Spacer(modifier = Modifier.height(28.dp))
+                Spacer(modifier = Modifier.height(24.dp))
 
-                // Buttons row
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.End),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     TextButton(
                         onClick = onDismiss,
-                        modifier = Modifier
-                            .weight(1f)
-                            .clip(RoundedCornerShape(14.dp))
-                            .background(BgElevated)
-                            .border(1.dp, BorderDefault, RoundedCornerShape(14.dp))
+                        shape = RoundedCornerShape(100)
                     ) {
-                        Text("Cancel", color = TextSecondary, fontWeight = FontWeight.Medium)
+                        Text("Cancel")
                     }
 
                     Button(
                         onClick = onConfirm,
-                        modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(14.dp),
+                        shape = RoundedCornerShape(100),
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = accentColor.copy(alpha = 0.15f),
-                            contentColor = accentColor
+                            containerColor = style.confirmBg,
+                            contentColor = style.confirmContent
                         )
                     ) {
-                        Text(
-                            actionName,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 14.sp
-                        )
+                        Text(style.actionName)
                     }
                 }
             }
         }
     }
 }
-
-// Helper data class
-private data class Quintuple<A, B, C, D, E>(val a: A, val b: B, val c: C, val d: D, val e: E)
-
-private operator fun <A, B, C, D, E> Quintuple<A, B, C, D, E>.component1() = a
-private operator fun <A, B, C, D, E> Quintuple<A, B, C, D, E>.component2() = b
-private operator fun <A, B, C, D, E> Quintuple<A, B, C, D, E>.component3() = c
-private operator fun <A, B, C, D, E> Quintuple<A, B, C, D, E>.component4() = d
-private operator fun <A, B, C, D, E> Quintuple<A, B, C, D, E>.component5() = e

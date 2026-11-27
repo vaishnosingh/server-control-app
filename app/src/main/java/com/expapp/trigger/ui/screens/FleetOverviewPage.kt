@@ -1,15 +1,12 @@
 package com.expapp.trigger.ui.screens
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -21,15 +18,21 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Terminal
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -39,32 +42,18 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.expapp.trigger.data.model.DeviceConfig
+import com.expapp.trigger.data.repository.ThemeMode
 import com.expapp.trigger.network.NodeStatus
 import com.expapp.trigger.ui.components.AccentColorDialog
-import com.expapp.trigger.ui.theme.BgCard
-import com.expapp.trigger.ui.theme.BgElevated
-import com.expapp.trigger.ui.theme.BgSurface
-import com.expapp.trigger.ui.theme.BorderSubtle
-import com.expapp.trigger.ui.theme.GreenVibrant
-import com.expapp.trigger.ui.theme.OfflineBg
-import com.expapp.trigger.ui.theme.OfflineBorder
-import com.expapp.trigger.ui.theme.OfflineText
-import com.expapp.trigger.ui.theme.OnlineBg
-import com.expapp.trigger.ui.theme.OnlineBorder
-import com.expapp.trigger.ui.theme.OnlineText
-import com.expapp.trigger.ui.theme.RedVibrant
+import com.expapp.trigger.ui.theme.LocalIsDarkTheme
+import com.expapp.trigger.ui.theme.MonoFontFamily
+import com.expapp.trigger.ui.theme.PixelSemantic
 import com.expapp.trigger.ui.theme.ServerAccents
-import com.expapp.trigger.ui.theme.TextMuted
-import com.expapp.trigger.ui.theme.TextPrimary
-import com.expapp.trigger.ui.theme.TextSecondary
+import com.expapp.trigger.ui.theme.ServerMaterialTheme
 
 @Composable
 fun FleetOverviewPage(
@@ -72,13 +61,14 @@ fun FleetOverviewPage(
     nodeStatuses: Map<String, NodeStatus>,
     checkingStatusMap: Map<String, Boolean>,
     isSyncing: Boolean,
-    onOpenServer: (index: Int, openDashboard: Boolean) -> Unit,
+    themeMode: ThemeMode,
+    onOpenServer: (index: Int, openSysPulse: Boolean) -> Unit,
     onAssignAccentColor: (deviceId: String, hex: String) -> Unit,
     onSyncAllR2: () -> Unit,
     onRefreshAll: () -> Unit,
-    onAddServerClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val dark = LocalIsDarkTheme.current
     var colorPickerDevice by remember { mutableStateOf<DeviceConfig?>(null) }
 
     if (colorPickerDevice != null) {
@@ -99,106 +89,104 @@ fun FleetOverviewPage(
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 16.dp, vertical = 10.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        // ── FLEET SUMMARY HEADER ─────────────────────────────────────────
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(20.dp))
-                .background(Brush.verticalGradient(listOf(BgElevated, BgSurface)))
-                .border(1.dp, BorderSubtle, RoundedCornerShape(20.dp))
-                .padding(16.dp)
+        // ── PIXEL FLEET SUMMARY CARD ─────────────────────────────────────
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(28.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerHigh
         ) {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(
+                modifier = Modifier.padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Column {
+                    Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "SERVER FLEET",
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = TextPrimary,
-                            fontFamily = FontFamily.Monospace,
-                            letterSpacing = 1.sp
+                            text = "Infrastructure Fleet",
+                            style = MaterialTheme.typography.headlineSmall,
+                            color = MaterialTheme.colorScheme.onSurface
                         )
-                        Spacer(modifier = Modifier.height(2.dp))
                         Text(
-                            text = "Tap a server to manage or pick an accent color",
-                            fontSize = 11.sp,
-                            color = TextSecondary
+                            text = "Tap any server to manage or customize its palette",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
 
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        FleetTopActionChip(
-                            label = if (isSyncing) "SYNCING" else "SYNC R2",
-                            icon = Icons.Default.CloudSync,
-                            color = Color(0xFF38BDF8),
-                            onClick = onSyncAllR2
-                        )
-                        FleetTopActionChip(
-                            label = "PING",
-                            icon = Icons.Default.Refresh,
-                            color = GreenVibrant,
-                            onClick = onRefreshAll
-                        )
+                        FilledTonalIconButton(onClick = onSyncAllR2) {
+                            Icon(
+                                Icons.Default.CloudSync,
+                                contentDescription = if (isSyncing) "Syncing" else "Sync R2",
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                        FilledTonalIconButton(onClick = onRefreshAll) {
+                            Icon(
+                                Icons.Default.Refresh,
+                                contentDescription = "Ping All",
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
                     }
                 }
 
-                // KPI Metrics Strip
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    FleetStatChip(
-                        label = "TOTAL",
+                    FleetStatPill(
+                        label = "Total",
                         value = "${devices.size}",
-                        color = TextPrimary,
+                        containerColor = MaterialTheme.colorScheme.surfaceContainer,
+                        contentColor = MaterialTheme.colorScheme.onSurface,
                         modifier = Modifier.weight(1f)
                     )
-                    FleetStatChip(
-                        label = "ONLINE",
+                    FleetStatPill(
+                        label = "Online",
                         value = "$onlineCount",
-                        color = GreenVibrant,
+                        containerColor = PixelSemantic.onlineContainer(dark),
+                        contentColor = PixelSemantic.onOnlineContainer(dark),
                         modifier = Modifier.weight(1f)
                     )
-                    FleetStatChip(
-                        label = "OFFLINE",
+                    FleetStatPill(
+                        label = "Offline",
                         value = "$offlineCount",
-                        color = if (offlineCount > 0) RedVibrant else TextMuted,
+                        containerColor = if (offlineCount > 0) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.surfaceContainer,
+                        contentColor = if (offlineCount > 0) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.weight(1f)
                     )
                 }
             }
         }
 
-        // ── SERVER CARDS LIST ────────────────────────────────────────────
+        // ── PER-SERVER MATERIAL YOU SEEDED CARDS ─────────────────────────
         if (devices.isEmpty()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(20.dp))
-                    .background(BgCard)
-                    .border(1.dp, BorderSubtle, RoundedCornerShape(20.dp))
-                    .padding(24.dp),
-                contentAlignment = Alignment.Center
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(28.dp),
+                color = MaterialTheme.colorScheme.surfaceContainer
             ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Column(
+                    modifier = Modifier.padding(28.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
                     Text(
-                        text = "No Servers Configured",
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = TextPrimary
+                        text = "No Servers Yet",
+                        style = MaterialTheme.typography.titleLarge,
+                        color = MaterialTheme.colorScheme.onSurface
                     )
-                    Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "Add a server using its Cloudflare R2 JSON config URL.",
-                        fontSize = 12.sp,
-                        color = TextSecondary
+                        text = "Tap + Add Server below to configure from Cloudflare R2.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
@@ -206,337 +194,249 @@ fun FleetOverviewPage(
             devices.forEachIndexed { idx, device ->
                 val status = nodeStatuses[device.id]
                 val isChecking = checkingStatusMap[device.id] == true
-                val accent = ServerAccents.parseColor(device.accentColorHex)
 
-                FleetServerCard(
-                    device = device,
-                    accentColor = accent,
-                    status = status,
-                    isChecking = isChecking,
-                    onOpenControl = { onOpenServer(idx, false) },
-                    onOpenSysPulse = { onOpenServer(idx, true) },
-                    onPickAccentColor = { colorPickerDevice = device }
-                )
+                ServerMaterialTheme(seedHex = device.accentColorHex, themeMode = themeMode) {
+                    FleetServerCard(
+                        device = device,
+                        status = status,
+                        isChecking = isChecking,
+                        onOpenControl = { onOpenServer(idx, false) },
+                        onOpenSysPulse = { onOpenServer(idx, true) },
+                        onPickAccentColor = { colorPickerDevice = device }
+                    )
+                }
             }
         }
 
-        // ── ADD SERVER CTA CARD ──────────────────────────────────────────
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(16.dp))
-                .background(BgCard)
-                .border(1.dp, GreenVibrant.copy(alpha = 0.35f), RoundedCornerShape(16.dp))
-                .clickable(onClick = onAddServerClick)
-                .padding(horizontal = 16.dp, vertical = 14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.Center
-        ) {
-            Icon(
-                Icons.Default.Add,
-                contentDescription = null,
-                tint = GreenVibrant,
-                modifier = Modifier.size(18.dp)
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                text = "Add New Server via R2",
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Bold,
-                color = GreenVibrant
-            )
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
+        // Bottom space so ExtendedFloatingActionButton never overlaps the last card
+        Spacer(modifier = Modifier.height(84.dp))
     }
 }
 
 @Composable
 private fun FleetServerCard(
     device: DeviceConfig,
-    accentColor: Color,
     status: NodeStatus?,
     isChecking: Boolean,
     onOpenControl: () -> Unit,
     onOpenSysPulse: () -> Unit,
     onPickAccentColor: () -> Unit
 ) {
+    val dark = LocalIsDarkTheme.current
     val isOnline = status?.isOnline
+    val accentSwatch = ServerAccents.parseColor(device.accentColorHex)
 
-    Row(
+    Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .height(IntrinsicSize.Max)
-            .clip(RoundedCornerShape(18.dp))
-            .background(BgCard)
-            .border(1.dp, BorderSubtle, RoundedCornerShape(18.dp))
-            .clickable(onClick = onOpenControl)
+            .clip(RoundedCornerShape(28.dp))
+            .clickable(onClick = onOpenControl),
+        shape = RoundedCornerShape(28.dp),
+        color = MaterialTheme.colorScheme.surfaceContainer
     ) {
-        // Left vertical accent rail for effortless server color identification
-        Box(
-            modifier = Modifier
-                .width(4.dp)
-                .fillMaxHeight()
-                .background(accentColor)
-        )
-
         Column(
             modifier = Modifier
-                .weight(1f)
-                .padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+                .fillMaxWidth()
+                .padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(46.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primaryContainer),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(40.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(accentColor.copy(alpha = 0.14f))
-                            .border(1.dp, accentColor.copy(alpha = 0.45f), RoundedCornerShape(12.dp)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Terminal,
-                            contentDescription = null,
-                            tint = accentColor,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
+                    Icon(
+                        imageVector = Icons.Default.Terminal,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
 
-                    Spacer(modifier = Modifier.width(12.dp))
+                Spacer(modifier = Modifier.width(14.dp))
 
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = device.name,
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = TextPrimary,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Text(
-                                text = device.node,
-                                fontSize = 11.sp,
-                                color = accentColor,
-                                fontFamily = FontFamily.Monospace,
-                                fontWeight = FontWeight.SemiBold
-                            )
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = device.name,
+                        style = MaterialTheme.typography.titleLarge,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = buildString {
+                            append(device.node)
                             if (!status?.ip.isNullOrBlank()) {
-                                Text(
-                                    text = "• ${status?.ip}",
-                                    fontSize = 11.sp,
-                                    color = TextMuted,
-                                    fontFamily = FontFamily.Monospace
-                                )
+                                append(" • ")
+                                append(status!!.ip)
                             }
-                        }
-                    }
+                        },
+                        style = MaterialTheme.typography.bodySmall.copy(fontFamily = MonoFontFamily),
+                        color = MaterialTheme.colorScheme.primary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
 
-                    // 1-Tap Accent Color Assignment Pill
+                // 1-Tap Seed Color Picker Button
+                Surface(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(14.dp))
+                        .clickable(onClick = onPickAccentColor),
+                    shape = RoundedCornerShape(14.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh
+                ) {
                     Row(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(BgElevated)
-                            .border(1.dp, accentColor.copy(alpha = 0.45f), RoundedCornerShape(10.dp))
-                            .clickable(onClick = onPickAccentColor)
-                            .padding(horizontal = 8.dp, vertical = 6.dp),
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Box(
                             modifier = Modifier
-                                .size(10.dp)
+                                .size(12.dp)
                                 .clip(CircleShape)
-                                .background(accentColor)
+                                .background(accentSwatch)
                         )
-                        Spacer(modifier = Modifier.width(5.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
                         Icon(
                             imageVector = Icons.Default.Palette,
-                            contentDescription = "Assign accent color",
-                            tint = TextSecondary,
-                            modifier = Modifier.size(13.dp)
+                            contentDescription = "Theme color",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(16.dp)
                         )
                     }
                 }
+            }
 
-                // Status & Uptime Row
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
+            // Status & Uptime Metadata Row
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                val chipBg = when {
+                    isChecking -> MaterialTheme.colorScheme.surfaceContainerHigh
+                    isOnline == true -> PixelSemantic.onlineContainer(dark)
+                    else -> MaterialTheme.colorScheme.errorContainer
+                }
+                val chipFg = when {
+                    isChecking -> MaterialTheme.colorScheme.onSurfaceVariant
+                    isOnline == true -> PixelSemantic.onOnlineContainer(dark)
+                    else -> MaterialTheme.colorScheme.onErrorContainer
+                }
+
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = chipBg
                 ) {
-                    val statusBg = if (isChecking) BgElevated else if (isOnline == true) OnlineBg else OfflineBg
-                    val statusBorder = if (isChecking) BorderSubtle else if (isOnline == true) OnlineBorder else OfflineBorder
-                    val statusColor = if (isChecking) TextSecondary else if (isOnline == true) OnlineText else OfflineText
-
                     Row(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(statusBg)
-                            .border(1.dp, statusBorder, RoundedCornerShape(8.dp))
-                            .padding(horizontal = 8.dp, vertical = 4.dp),
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         if (isChecking) {
                             CircularProgressIndicator(
-                                modifier = Modifier.size(9.dp),
+                                modifier = Modifier.size(10.dp),
                                 strokeWidth = 1.5.dp,
-                                color = TextSecondary
+                                color = chipFg
                             )
                         } else {
                             Box(
                                 modifier = Modifier
                                     .size(7.dp)
-                                    .background(statusColor, CircleShape)
+                                    .clip(CircleShape)
+                                    .background(chipFg)
                             )
                         }
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = if (isChecking) "CHECKING" else (status?.statusText ?: "UNKNOWN"),
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = statusColor,
-                            fontFamily = FontFamily.Monospace
+                            text = if (isChecking) "Checking" else (status?.statusText?.lowercase()?.replaceFirstChar { it.uppercase() } ?: "Unknown"),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = chipFg
                         )
                     }
-
-                    val metaText = when {
-                        isOnline == true && !status.uptime.isNullOrBlank() -> "Up ${status.uptime}"
-                        isOnline == false && !status.lastActiveAgo.isNullOrBlank() -> "Seen ${status.lastActiveAgo}"
-                        device.r2Url.isNotBlank() -> "R2 Synced"
-                        else -> "Manual"
-                    }
-                    Text(
-                        text = metaText,
-                        fontSize = 11.sp,
-                        color = TextSecondary,
-                        fontFamily = FontFamily.Monospace
-                    )
                 }
 
-                // Action Bar: Power Page vs SysPulse Metrics
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .weight(1f)
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(accentColor.copy(alpha = 0.14f))
-                            .border(1.dp, accentColor.copy(alpha = 0.35f), RoundedCornerShape(10.dp))
-                            .clickable(onClick = onOpenControl)
-                            .padding(vertical = 8.dp),
-                        horizontalArrangement = Arrangement.Center,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            Icons.Default.PowerSettingsNew,
-                            contentDescription = null,
-                            tint = accentColor,
-                            modifier = Modifier.size(14.dp)
-                        )
-                        Spacer(modifier = Modifier.width(5.dp))
-                        Text(
-                            text = "Power Control",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = accentColor
-                        )
-                    }
+                val metaText = when {
+                    isOnline == true && !status.uptime.isNullOrBlank() -> "Up ${status.uptime}"
+                    isOnline == false && !status.lastActiveAgo.isNullOrBlank() -> "Seen ${status.lastActiveAgo}"
+                    device.r2Url.isNotBlank() -> "R2 Synced"
+                    else -> "Manual"
+                }
+                Text(
+                    text = metaText,
+                    style = MaterialTheme.typography.bodySmall.copy(fontFeatureSettings = "tnum"),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
 
-                    Row(
-                        modifier = Modifier
-                            .weight(1f)
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(BgElevated)
-                            .border(1.dp, BorderSubtle, RoundedCornerShape(10.dp))
-                            .clickable(onClick = onOpenSysPulse)
-                            .padding(vertical = 8.dp),
-                        horizontalArrangement = Arrangement.Center,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            Icons.Default.Speed,
-                            contentDescription = null,
-                            tint = TextPrimary,
-                            modifier = Modifier.size(14.dp)
-                        )
-                        Spacer(modifier = Modifier.width(5.dp))
-                        Text(
-                            text = "SysPulse",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = TextPrimary
-                        )
-                    }
+            // Action Pills Row
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Button(
+                    onClick = onOpenControl,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                    ),
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(Icons.Default.PowerSettingsNew, null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Controls")
+                }
+
+                FilledTonalButton(
+                    onClick = onOpenSysPulse,
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(Icons.Default.Speed, null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("SysPulse")
                 }
             }
         }
-}
-
-@Composable
-private fun FleetTopActionChip(
-    label: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    color: Color,
-    onClick: () -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .clip(RoundedCornerShape(9.dp))
-            .background(color.copy(alpha = 0.14f))
-            .border(1.dp, color.copy(alpha = 0.35f), RoundedCornerShape(9.dp))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 8.dp, vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Icon(icon, contentDescription = label, tint = color, modifier = Modifier.size(13.dp))
-        Spacer(modifier = Modifier.width(4.dp))
-        Text(
-            text = label,
-            fontSize = 10.sp,
-            fontWeight = FontWeight.Bold,
-            color = color,
-            fontFamily = FontFamily.Monospace
-        )
     }
 }
 
 @Composable
-private fun FleetStatChip(
+private fun FleetStatPill(
     label: String,
     value: String,
-    color: Color,
+    containerColor: androidx.compose.ui.graphics.Color,
+    contentColor: androidx.compose.ui.graphics.Color,
     modifier: Modifier = Modifier
 ) {
-    Column(
-        modifier = modifier
-            .clip(RoundedCornerShape(12.dp))
-            .background(BgCard)
-            .border(1.dp, BorderSubtle, RoundedCornerShape(12.dp))
-            .padding(vertical = 8.dp, horizontal = 10.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(18.dp),
+        color = containerColor
     ) {
-        Text(
-            text = value,
-            fontSize = 16.sp,
-            fontWeight = FontWeight.Bold,
-            color = color,
-            fontFamily = FontFamily.Monospace
-        )
-        Text(
-            text = label,
-            fontSize = 9.sp,
-            fontWeight = FontWeight.Bold,
-            color = TextMuted,
-            letterSpacing = 0.8.sp
-        )
+        Column(
+            modifier = Modifier.padding(vertical = 10.dp, horizontal = 8.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = value,
+                style = MaterialTheme.typography.titleLarge.copy(
+                    fontWeight = FontWeight.Bold,
+                    fontFeatureSettings = "tnum"
+                ),
+                color = contentColor
+            )
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelMedium,
+                color = contentColor.copy(alpha = 0.8f)
+            )
+        }
     }
 }
