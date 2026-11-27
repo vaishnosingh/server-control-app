@@ -165,4 +165,25 @@ class DeviceRepositoryTest {
         assertTrue(changed)
         assertEquals("#06B6D4", repository.getDevices().first().accentColorHex)
     }
+
+    @Test
+    fun updateDevice_preservesExactListOrderAcrossMultipleServers() {
+        val d1 = DeviceConfig(id = "id-1", name = "First", node = "n1", secretKey = "k1", powerOnUrl = "", powerOffUrl = "", rebootUrl = "")
+        val d2 = DeviceConfig(id = "id-2", name = "Second", node = "n2", secretKey = "k2", powerOnUrl = "", powerOffUrl = "", rebootUrl = "")
+        val d3 = DeviceConfig(id = "id-3", name = "Third", node = "n3", secretKey = "k3", powerOnUrl = "", powerOffUrl = "", rebootUrl = "")
+
+        repository.addDevice(d1)
+        repository.addDevice(d2)
+        repository.addDevice(d3)
+
+        repository.updateDevice(d2.copy(name = "Second Updated", accentColorHex = "#3B82F6"))
+        repository.updateDevice(d1.copy(name = "First Updated"))
+
+        val devices = repository.getDevices()
+        assertEquals(listOf("id-1", "id-2", "id-3"), devices.map { it.id })
+        assertEquals("First Updated", devices[0].name)
+        assertEquals("Second Updated", devices[1].name)
+        assertEquals("#3B82F6", devices[1].accentColorHex)
+        assertEquals("Third", devices[2].name)
+    }
 }

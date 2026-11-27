@@ -6,8 +6,10 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -261,33 +263,29 @@ private fun FleetServerCard(
 ) {
     val isOnline = status?.isOnline
 
-    Box(
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(20.dp))
+            .height(IntrinsicSize.Max)
+            .clip(RoundedCornerShape(18.dp))
             .background(BgCard)
-            .border(1.dp, accentColor.copy(alpha = 0.35f), RoundedCornerShape(20.dp))
+            .border(1.dp, BorderSubtle, RoundedCornerShape(18.dp))
             .clickable(onClick = onOpenControl)
     ) {
-        Column(modifier = Modifier.fillMaxWidth()) {
-            // Vivid top accent bar for instant server identification
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(3.dp)
-                    .background(
-                        Brush.horizontalGradient(
-                            listOf(accentColor, accentColor.copy(alpha = 0.35f))
-                        )
-                    )
-            )
+        // Left vertical accent rail for effortless server color identification
+        Box(
+            modifier = Modifier
+                .width(4.dp)
+                .fillMaxHeight()
+                .background(accentColor)
+        )
 
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(14.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
@@ -481,7 +479,6 @@ private fun FleetServerCard(
                 }
             }
         }
-    }
 }
 
 @Composable

@@ -3,17 +3,17 @@ package com.expapp.trigger.ui.theme
 import androidx.compose.ui.graphics.Color
 
 // ── Background System ─────────────────────────────────────────────────────
-val BgDeep        = Color(0xFF060911)   // deepest black-navy
-val BgBase        = Color(0xFF0C0F1A)   // main bg
-val BgSurface     = Color(0xFF111827)   // card surface
-val BgElevated    = Color(0xFF1A2235)   // elevated panels
-val BgCard        = Color(0xFF161F30)   // card background
-val BgGlass       = Color(0x14FFFFFF)   // frosted glass overlay
+val BgDeep        = Color(0xFF070A10)   // deepest obsidian
+val BgBase        = Color(0xFF0A0E17)   // main canvas
+val BgSurface     = Color(0xFF101623)   // elevated chrome / sheets
+val BgCard        = Color(0xFF141C2B)   // primary cards
+val BgElevated    = Color(0xFF1A2436)   // interactive panels / inputs
+val BgGlass       = Color(0x12FFFFFF)   // subtle highlight overlay
 
 // ── Border System ─────────────────────────────────────────────────────────
-val BorderSubtle  = Color(0xFF1E2D47)   // very subtle border
-val BorderDefault = Color(0xFF253450)   // standard border
-val BorderStrong  = Color(0xFF334D73)   // stronger border on hover/focus
+val BorderSubtle  = Color(0xFF1F2B40)   // 1dp hairline border
+val BorderDefault = Color(0xFF283752)   // standard border
+val BorderStrong  = Color(0xFF384C70)   // active / focus border
 
 // ── Text ──────────────────────────────────────────────────────────────────
 val TextPrimary   = Color(0xFFF1F5F9)   // near-white

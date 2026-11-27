@@ -97,8 +97,12 @@ class DeviceRepository(private val storage: KeyValueStorage) {
 
     fun addDevice(device: DeviceConfig) {
         val current = getDevices().toMutableList()
-        current.removeAll { it.id == device.id }
-        current.add(device)
+        val existingIdx = current.indexOfFirst { it.id == device.id }
+        if (existingIdx != -1) {
+            current[existingIdx] = device
+        } else {
+            current.add(device)
+        }
         saveDevices(current)
     }
 
@@ -109,7 +113,14 @@ class DeviceRepository(private val storage: KeyValueStorage) {
     }
 
     fun updateDevice(device: DeviceConfig) {
-        addDevice(device)
+        val current = getDevices().toMutableList()
+        val existingIdx = current.indexOfFirst { it.id == device.id }
+        if (existingIdx != -1) {
+            current[existingIdx] = device
+            saveDevices(current)
+        } else {
+            addDevice(device)
+        }
     }
 
     fun applyParsedEndpoints(deviceId: String, ep: ParsedEndpoints): Boolean {

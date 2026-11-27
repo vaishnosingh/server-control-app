@@ -1,12 +1,7 @@
 package com.expapp.trigger.ui.components
 
-import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -23,8 +18,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.ripple.rememberRipple
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -36,13 +32,18 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.expapp.trigger.ui.theme.BgCard
+import com.expapp.trigger.ui.theme.BgSurface
+import com.expapp.trigger.ui.theme.BorderSubtle
+import com.expapp.trigger.ui.theme.TextMuted
+import com.expapp.trigger.ui.theme.TextPrimary
+import com.expapp.trigger.ui.theme.TextSecondary
 
 @Composable
 fun HugeActionButton(
@@ -59,69 +60,38 @@ fun HugeActionButton(
     val isPressed by interactionSource.collectIsPressedAsState()
 
     val scale by animateFloatAsState(
-        targetValue = if (isPressed && enabled) 0.97f else 1f,
+        targetValue = if (isPressed && enabled) 0.98f else 1f,
         animationSpec = tween(100, easing = FastOutSlowInEasing),
         label = "button_scale"
     )
 
-    val borderAlpha by animateFloatAsState(
-        targetValue = if (enabled) 1f else 0.25f,
-        animationSpec = tween(300),
-        label = "border_alpha"
-    )
-
-    val contentAlpha = if (enabled) 1f else 0.35f
-    val shape = RoundedCornerShape(20.dp)
-
-    // Pulsing glow when enabled
-    val infiniteTransition = rememberInfiniteTransition(label = "glow")
-    val glowAlpha by infiniteTransition.animateFloat(
-        initialValue = 0.3f,
-        targetValue = 0.65f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(2000, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "glow_alpha"
-    )
-
-    val shadowColor = borderColor.copy(alpha = if (enabled && !isLoading) glowAlpha * 0.5f else 0f)
+    val shape = RoundedCornerShape(16.dp)
+    val surfaceColor = if (enabled) BgCard else BgSurface.copy(alpha = 0.65f)
+    val tintAccent = if (enabled) borderColor else TextMuted.copy(alpha = 0.45f)
+    val cardBorder = if (enabled) borderColor.copy(alpha = 0.28f) else BorderSubtle.copy(alpha = 0.5f)
+    val leadTint = gradientColors.firstOrNull()?.copy(alpha = if (enabled) 0.35f else 0.08f) ?: Color.Transparent
 
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .scale(scale)
-            .shadow(
-                elevation = if (enabled) 16.dp else 0.dp,
-                shape = shape,
-                spotColor = shadowColor,
-                ambientColor = shadowColor
-            )
             .clip(shape)
             .background(
-                brush = Brush.linearGradient(
-                    if (enabled) gradientColors
-                    else gradientColors.map { it.copy(alpha = 0.2f) }
+                Brush.horizontalGradient(
+                    listOf(
+                        if (enabled) borderColor.copy(alpha = 0.08f) else leadTint,
+                        surfaceColor
+                    )
                 )
             )
-            .border(
-                width = 1.dp,
-                brush = Brush.linearGradient(
-                    listOf(
-                        borderColor.copy(alpha = borderAlpha * 0.8f),
-                        borderColor.copy(alpha = borderAlpha * 0.2f),
-                        borderColor.copy(alpha = borderAlpha * 0.5f),
-                    )
-                ),
-                shape = shape
-            )
+            .border(1.dp, cardBorder, shape)
             .clickable(
                 interactionSource = interactionSource,
-                indication = rememberRipple(color = borderColor.copy(alpha = 0.4f)),
+                indication = rememberRipple(color = borderColor.copy(alpha = 0.35f)),
                 enabled = enabled && !isLoading,
                 onClick = onClick
             )
-            .padding(horizontal = 24.dp, vertical = 20.dp)
+            .padding(horizontal = 16.dp, vertical = 15.dp)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -132,68 +102,70 @@ fun HugeActionButton(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.weight(1f)
             ) {
-                // Icon circle with glow
+                // Sleek left indicator bar
                 Box(
                     modifier = Modifier
-                        .size(52.dp)
-                        .background(
-                            brush = Brush.radialGradient(
-                                listOf(
-                                    borderColor.copy(alpha = if (enabled) 0.25f else 0.08f),
-                                    Color.Transparent
-                                )
-                            ),
-                            shape = CircleShape
-                        )
+                        .width(3.dp)
+                        .height(34.dp)
+                        .clip(RoundedCornerShape(2.dp))
+                        .background(tintAccent)
+                )
+
+                Spacer(modifier = Modifier.width(12.dp))
+
+                // Icon tile
+                Box(
+                    modifier = Modifier
+                        .size(44.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(tintAccent.copy(alpha = if (enabled) 0.13f else 0.06f))
                         .border(
                             1.dp,
-                            borderColor.copy(alpha = if (enabled) 0.4f else 0.1f),
-                            CircleShape
+                            tintAccent.copy(alpha = if (enabled) 0.32f else 0.12f),
+                            RoundedCornerShape(12.dp)
                         ),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = icon,
                         contentDescription = text,
-                        tint = borderColor.copy(alpha = contentAlpha),
-                        modifier = Modifier.size(26.dp)
+                        tint = tintAccent,
+                        modifier = Modifier.size(22.dp)
                     )
                 }
 
-                Spacer(modifier = Modifier.width(18.dp))
+                Spacer(modifier = Modifier.width(14.dp))
 
                 Column {
                     Text(
                         text = text,
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White.copy(alpha = contentAlpha),
-                        letterSpacing = 0.5.sp
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = if (enabled) TextPrimary else TextMuted.copy(alpha = 0.7f),
+                        letterSpacing = 0.2.sp
                     )
-                    Spacer(modifier = Modifier.height(3.dp))
+                    Spacer(modifier = Modifier.height(2.dp))
                     Text(
                         text = subtext,
                         fontSize = 12.sp,
-                        fontWeight = FontWeight.Normal,
-                        color = Color.White.copy(alpha = contentAlpha * 0.6f)
+                        color = if (enabled) TextSecondary else TextMuted.copy(alpha = 0.45f)
                     )
                 }
             }
 
             if (isLoading) {
                 CircularProgressIndicator(
-                    modifier = Modifier.size(24.dp),
+                    modifier = Modifier.size(20.dp),
                     color = borderColor,
-                    strokeWidth = 2.5.dp,
+                    strokeWidth = 2.dp,
                     trackColor = borderColor.copy(alpha = 0.2f)
                 )
             } else if (enabled) {
-                // Chevron
-                Text(
-                    text = "›",
-                    fontSize = 28.sp,
-                    color = borderColor.copy(alpha = 0.5f),
-                    fontWeight = FontWeight.Light
+                Icon(
+                    imageVector = Icons.Default.ChevronRight,
+                    contentDescription = null,
+                    tint = borderColor.copy(alpha = 0.65f),
+                    modifier = Modifier.size(22.dp)
                 )
             }
         }

@@ -391,24 +391,16 @@ fun DevicePage(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(24.dp))
-                .background(Brush.verticalGradient(listOf(BgElevated, BgSurface)))
-                .border(1.dp, serverAccent.copy(alpha = 0.35f), RoundedCornerShape(24.dp))
+                .clip(RoundedCornerShape(20.dp))
+                .background(BgCard)
+                .border(1.dp, BorderSubtle, RoundedCornerShape(20.dp))
         ) {
-            // Vivid top accent hairline reflecting this server's assigned color
+            // Subtle top accent hairline reflecting this server's assigned color
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(3.dp)
-                    .background(
-                        Brush.horizontalGradient(
-                            listOf(
-                                serverAccent.copy(alpha = 0.25f),
-                                serverAccent,
-                                serverAccent.copy(alpha = 0.25f)
-                            )
-                        )
-                    )
+                    .background(serverAccent)
             )
 
             Column(
@@ -741,7 +733,7 @@ fun DevicePage(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(14.dp))
-                .background(BgElevated)
+                .background(BgCard)
                 .border(1.dp, BorderSubtle, RoundedCornerShape(14.dp))
                 .padding(4.dp),
             horizontalArrangement = Arrangement.spacedBy(4.dp)
@@ -751,8 +743,8 @@ fun DevicePage(
                 modifier = Modifier
                     .weight(1f)
                     .clip(RoundedCornerShape(10.dp))
-                    .background(if (isControl) BgSurface else Color.Transparent)
-                    .then(if (isControl) Modifier.border(1.dp, serverAccent.copy(alpha = 0.5f), RoundedCornerShape(10.dp)) else Modifier)
+                    .background(if (isControl) BgElevated else Color.Transparent)
+                    .then(if (isControl) Modifier.border(1.dp, serverAccent.copy(alpha = 0.45f), RoundedCornerShape(10.dp)) else Modifier)
                     .clickable { selectedTab = "CONTROL" }
                     .padding(vertical = 10.dp),
                 contentAlignment = Alignment.Center
@@ -768,7 +760,7 @@ fun DevicePage(
                         modifier = Modifier.size(16.dp)
                     )
                     Text(
-                        "Power Control",
+                        "Power Controls",
                         fontSize = 13.sp,
                         fontWeight = if (isControl) FontWeight.Bold else FontWeight.Medium,
                         color = if (isControl) TextPrimary else TextSecondary
@@ -780,8 +772,8 @@ fun DevicePage(
                 modifier = Modifier
                     .weight(1f)
                     .clip(RoundedCornerShape(10.dp))
-                    .background(if (!isControl) BgSurface else Color.Transparent)
-                    .then(if (!isControl) Modifier.border(1.dp, serverAccent.copy(alpha = 0.5f), RoundedCornerShape(10.dp)) else Modifier)
+                    .background(if (!isControl) BgElevated else Color.Transparent)
+                    .then(if (!isControl) Modifier.border(1.dp, serverAccent.copy(alpha = 0.45f), RoundedCornerShape(10.dp)) else Modifier)
                     .clickable { selectedTab = "DASHBOARD" }
                     .padding(vertical = 10.dp),
                 contentAlignment = Alignment.Center
@@ -812,8 +804,8 @@ fun DevicePage(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(16.dp))
-                    .background(BgElevated)
-                    .border(1.dp, serverAccent.copy(alpha = 0.3f), RoundedCornerShape(16.dp))
+                    .background(BgCard)
+                    .border(1.dp, BorderSubtle, RoundedCornerShape(16.dp))
                     .clickable { selectedTab = "DASHBOARD" }
                     .padding(14.dp)
             ) {

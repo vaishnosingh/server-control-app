@@ -1,6 +1,7 @@
 package com.expapp.trigger.ui.screens
 
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -38,6 +39,7 @@ import androidx.compose.material.pullrefresh.PullRefreshIndicator
 import androidx.compose.material.pullrefresh.pullRefresh
 import androidx.compose.material.pullrefresh.rememberPullRefreshState
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Scaffold
@@ -506,46 +508,16 @@ fun MainScreen(
                     containerColor = BgSurface
                 )
             )
-        },
-        bottomBar = {
-            if (!showFleetOverview) {
-                val total = devices.size + 1
-                if (total > 1) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 12.dp),
-                        horizontalArrangement = Arrangement.Center,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        repeat(total) { i ->
-                            val selected = pagerState.currentPage == i
-                            val isAdd    = i == devices.size
-                            val itemAccent = if (!isAdd) ServerAccents.parseColor(devices[i].accentColorHex) else TextSecondary
-                            val dotColor = when {
-                                selected && !isAdd -> itemAccent
-                                selected           -> TextSecondary
-                                isAdd              -> TextMuted.copy(alpha = 0.4f)
-                                else               -> itemAccent.copy(alpha = 0.35f)
-                            }
-                            Box(
-                                modifier = Modifier
-                                    .padding(horizontal = 4.dp)
-                                    .size(if (selected) 8.dp else 6.dp)
-                                    .clip(CircleShape)
-                                    .background(dotColor)
-                                    .clickable {
-                                        coroutineScope.launch {
-                                            pagerState.animateScrollToPage(i)
-                                        }
-                                    }
-                            )
-                        }
-                    }
-                }
-            }
         }
     ) { innerPadding ->
+        BackHandler(enabled = showFleetOverview || (devices.isNotEmpty() && pagerState.currentPage >= devices.size)) {
+            if (showFleetOverview) {
+                showFleetOverview = false
+            } else if (devices.isNotEmpty() && pagerState.currentPage >= devices.size) {
+                coroutineScope.launch { pagerState.animateScrollToPage(devices.lastIndex) }
+            }
+        }
+
         // Pull to refresh container
         Box(
             modifier = Modifier
@@ -584,95 +556,102 @@ fun MainScreen(
                 )
             } else {
                 Column(modifier = Modifier.fillMaxSize()) {
-                    // Quick Multi-Server Accent Switcher Strip
+                    // Clean Multi-Server Accent Tab Strip
                     if (devices.isNotEmpty()) {
-                        Row(
+                        Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .background(BgSurface.copy(alpha = 0.7f))
-                                .horizontalScroll(rememberScrollState())
-                                .padding(horizontal = 14.dp, vertical = 8.dp),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                                .background(BgSurface)
                         ) {
-                            devices.forEachIndexed { idx, dev ->
-                                val accent = ServerAccents.parseColor(dev.accentColorHex)
-                                val isSelected = pagerState.currentPage == idx
-                                val isOnline = nodeStatuses[dev.id]?.isOnline
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .horizontalScroll(rememberScrollState())
+                                    .padding(horizontal = 14.dp, vertical = 8.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                devices.forEachIndexed { idx, dev ->
+                                    val accent = ServerAccents.parseColor(dev.accentColorHex)
+                                    val isSelected = pagerState.currentPage == idx
+                                    val isOnline = nodeStatuses[dev.id]?.isOnline
+                                    Row(
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(10.dp))
+                                            .background(if (isSelected) accent.copy(alpha = 0.14f) else BgCard)
+                                            .border(
+                                                1.dp,
+                                                if (isSelected) accent else BorderSubtle,
+                                                RoundedCornerShape(10.dp)
+                                            )
+                                            .clickable {
+                                                coroutineScope.launch { pagerState.animateScrollToPage(idx) }
+                                            }
+                                            .padding(horizontal = 10.dp, vertical = 6.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .width(3.dp)
+                                                .height(14.dp)
+                                                .clip(RoundedCornerShape(2.dp))
+                                                .background(accent)
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Box(
+                                            modifier = Modifier
+                                                .size(6.dp)
+                                                .clip(CircleShape)
+                                                .background(
+                                                    when (isOnline) {
+                                                        true -> GreenVibrant
+                                                        false -> RedVibrant
+                                                        null -> TextMuted
+                                                    }
+                                                )
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(
+                                            text = dev.name,
+                                            fontSize = 11.sp,
+                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                            color = if (isSelected) TextPrimary else TextSecondary
+                                        )
+                                    }
+                                }
+
+                                // Fleet Overview chip
                                 Row(
                                     modifier = Modifier
                                         .clip(RoundedCornerShape(10.dp))
-                                        .background(if (isSelected) accent.copy(alpha = 0.16f) else BgCard)
-                                        .border(
-                                            1.dp,
-                                            if (isSelected) accent else BorderSubtle,
-                                            RoundedCornerShape(10.dp)
-                                        )
-                                        .clickable {
-                                            coroutineScope.launch { pagerState.animateScrollToPage(idx) }
-                                        }
+                                        .background(BgElevated)
+                                        .border(1.dp, BorderSubtle, RoundedCornerShape(10.dp))
+                                        .clickable { showFleetOverview = true }
                                         .padding(horizontal = 10.dp, vertical = 6.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .width(4.dp)
-                                            .height(14.dp)
-                                            .clip(RoundedCornerShape(2.dp))
-                                            .background(accent)
+                                    Icon(
+                                        Icons.Default.GridView,
+                                        contentDescription = "All Servers",
+                                        tint = TextSecondary,
+                                        modifier = Modifier.size(13.dp)
                                     )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Box(
-                                        modifier = Modifier
-                                            .size(6.dp)
-                                            .clip(CircleShape)
-                                            .background(
-                                                when (isOnline) {
-                                                    true -> GreenVibrant
-                                                    false -> RedVibrant
-                                                    null -> TextMuted
-                                                }
-                                            )
-                                    )
-                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Spacer(modifier = Modifier.width(5.dp))
                                     Text(
-                                        text = dev.name,
+                                        text = "Fleet",
                                         fontSize = 11.sp,
-                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                        color = if (isSelected) TextPrimary else TextSecondary
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = TextSecondary
                                     )
                                 }
                             }
-
-                            // Fleet Overview chip
-                            Row(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .background(BgElevated)
-                                    .border(1.dp, BorderSubtle, RoundedCornerShape(10.dp))
-                                    .clickable { showFleetOverview = true }
-                                    .padding(horizontal = 10.dp, vertical = 6.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    Icons.Default.GridView,
-                                    contentDescription = "All Servers",
-                                    tint = TextSecondary,
-                                    modifier = Modifier.size(13.dp)
-                                )
-                                Spacer(modifier = Modifier.width(5.dp))
-                                Text(
-                                    text = "Fleet",
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = TextSecondary
-                                )
-                            }
+                            HorizontalDivider(color = BorderSubtle.copy(alpha = 0.7f))
                         }
                     }
 
                     HorizontalPager(
                         state = pagerState,
+                        key = { page -> if (page < devices.size) devices[page].id else "__add_device__" },
                         modifier = Modifier
                             .fillMaxWidth()
                             .weight(1f)
@@ -691,7 +670,12 @@ fun MainScreen(
                                 onTrigger = { action -> executeAction(dev, action) },
                                 onDelete = { d ->
                                     repository.deleteDevice(d.id)
-                                    devices = repository.getDevices()
+                                    val updatedList = repository.getDevices()
+                                    devices = updatedList
+                                    coroutineScope.launch {
+                                        val safeIdx = page.coerceAtMost(updatedList.size)
+                                        pagerState.scrollToPage(safeIdx)
+                                    }
                                 },
                                 onSyncConfig = { syncEndpoints(true) },
                                 onUpdateDevice = { updated ->

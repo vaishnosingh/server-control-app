@@ -1,7 +1,7 @@
 <resources>
     <style name="Theme.ExpApp" parent="android:Theme.Material.NoActionBar">
-        <item name="android:statusBarColor">#121212</item>
-        <item name="android:navigationBarColor">#121212</item>
+        <item name="android:statusBarColor">#0A0E17</item>
+        <item name="android:navigationBarColor">#0A0E17</item>
     </style>
 
     <!-- Translucent invisible theme for widget biometric authentication dialog -->
