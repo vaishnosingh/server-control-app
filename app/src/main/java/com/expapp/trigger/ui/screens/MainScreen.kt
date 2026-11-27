@@ -8,8 +8,10 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -20,15 +22,18 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.ExperimentalMaterialApi
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.History
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material.icons.filled.Terminal
+import androidx.compose.material.icons.filled.ViewCarousel
 import androidx.compose.material.pullrefresh.PullRefreshIndicator
 import androidx.compose.material.pullrefresh.pullRefresh
 import androidx.compose.material.pullrefresh.rememberPullRefreshState
@@ -77,6 +82,7 @@ import com.expapp.trigger.ui.components.NfcWriteDialog
 import com.expapp.trigger.ui.components.SettingsDialog
 import com.expapp.trigger.ui.components.UpdateDialog
 import com.expapp.trigger.ui.theme.BgBase
+import com.expapp.trigger.ui.theme.BgCard
 import com.expapp.trigger.ui.theme.BgElevated
 import com.expapp.trigger.ui.theme.BgSurface
 import com.expapp.trigger.ui.theme.BorderSubtle
@@ -84,6 +90,8 @@ import com.expapp.trigger.ui.theme.GreenVibrant
 import com.expapp.trigger.ui.theme.OnlineBg
 import com.expapp.trigger.ui.theme.OnlineBorder
 import com.expapp.trigger.ui.theme.OnlineText
+import com.expapp.trigger.ui.theme.RedVibrant
+import com.expapp.trigger.ui.theme.ServerAccents
 import com.expapp.trigger.ui.theme.TextMuted
 import com.expapp.trigger.ui.theme.TextPrimary
 import com.expapp.trigger.ui.theme.TextSecondary
@@ -125,6 +133,8 @@ fun MainScreen(
 
     var devices by remember { mutableStateOf(repository.getDevices()) }
     val pagerState = rememberPagerState(pageCount = { devices.size + 1 })
+    var showFleetOverview by remember { mutableStateOf(false) }
+    val tabOverrides = remember { mutableStateMapOf<String, String>() }
 
     var isAppInForeground by remember { mutableStateOf(true) }
     DisposableEffect(lifecycleOwner) {
@@ -189,22 +199,24 @@ fun MainScreen(
             triggerClient.fetchR2Config(device.r2Url) { result ->
                 completed++
                 result.onSuccess { ep ->
-                    val changed = repository.updateEndpoints(
-                        device.id,
-                        ep.powerOn,
-                        ep.powerOff,
-                        ep.reboot,
-                        ep.status,
-                        ep.syspulse,
-                        ep.syspulseSecret
-                    )
-                    if (changed) { updated++; devices = repository.getDevices() }
+                    val changed = repository.applyParsedEndpoints(device.id, ep)
+                    if (changed) {
+                        updated++
+                        val freshDevices = repository.getDevices()
+                        devices = freshDevices
+                        freshDevices.find { it.id == device.id }?.let { updatedDev ->
+                            refreshStatus(updatedDev, showIndicator = false)
+                        }
+                    }
                 }
                 if (completed == total) {
                     isSyncing = false
+                    if (updated > 0) {
+                        ServerWidgetProvider.updateAllWidgets(context)
+                    }
                     if (showToast) Toast.makeText(
                         context,
-                        if (updated > 0) "Endpoints updated" else "Already up to date",
+                        if (updated > 0) "Synced $updated server(s) from R2" else "Already up to date",
                         Toast.LENGTH_SHORT
                     ).show()
                 }
@@ -285,14 +297,18 @@ fun MainScreen(
         checkAppUpdate(false)
     }
 
-    // Active 5-second polling — only while in foreground on a device page
-    LaunchedEffect(pagerState.currentPage, isAppInForeground, devices.size) {
-        if (!isAppInForeground) return@LaunchedEffect
-        val page = pagerState.currentPage
-        if (page >= devices.size) return@LaunchedEffect
-        val dev = devices[page]
+    // Active 5-second polling — polls visible server (or whole fleet in Fleet Overview)
+    LaunchedEffect(pagerState.currentPage, showFleetOverview, isAppInForeground, devices.size) {
+        if (!isAppInForeground || devices.isEmpty()) return@LaunchedEffect
         while (isActive && isAppInForeground) {
-            refreshStatus(dev, showIndicator = false)
+            if (showFleetOverview) {
+                devices.forEach { refreshStatus(it, showIndicator = false) }
+            } else {
+                val page = pagerState.currentPage
+                if (page < devices.size) {
+                    refreshStatus(devices[page], showIndicator = false)
+                }
+            }
             delay(5000L)
         }
     }
@@ -343,6 +359,12 @@ fun MainScreen(
         }
     }
 
+    val currentActiveAccent = if (!showFleetOverview && pagerState.currentPage < devices.size) {
+        ServerAccents.parseColor(devices[pagerState.currentPage].accentColorHex)
+    } else {
+        GreenVibrant
+    }
+
     Scaffold(
         modifier = modifier.fillMaxSize(),
         containerColor = BgBase,
@@ -352,16 +374,25 @@ fun MainScreen(
                     Row(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(
-                            Icons.Default.Terminal,
-                            contentDescription = null,
-                            tint = GreenVibrant,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
+                        Box(
+                            modifier = Modifier
+                                .size(26.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(currentActiveAccent.copy(alpha = 0.14f))
+                                .border(1.dp, currentActiveAccent.copy(alpha = 0.45f), RoundedCornerShape(8.dp)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                Icons.Default.Terminal,
+                                contentDescription = null,
+                                tint = currentActiveAccent,
+                                modifier = Modifier.size(14.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "TRIGGER",
-                            fontSize = 12.sp,
+                            text = if (showFleetOverview) "FLEET OPS" else "TRIGGER",
+                            fontSize = 13.sp,
                             fontWeight = FontWeight.Bold,
                             letterSpacing = 1.sp,
                             color = TextPrimary,
@@ -369,31 +400,45 @@ fun MainScreen(
                             maxLines = 1
                         )
                         val onlineCount = devices.count { nodeStatuses[it.id]?.isOnline == true }
-                        if (devices.isNotEmpty() && onlineCount > 0) {
-                            Spacer(modifier = Modifier.width(4.dp))
+                        if (devices.isNotEmpty()) {
+                            Spacer(modifier = Modifier.width(6.dp))
                             Box(
                                 modifier = Modifier
-                                    .clip(CircleShape)
-                                    .background(OnlineBg)
-                                    .border(1.dp, OnlineBorder, CircleShape)
-                                    .padding(horizontal = 5.dp, vertical = 1.dp)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(if (onlineCount > 0) OnlineBg else BgElevated)
+                                    .border(1.dp, if (onlineCount > 0) OnlineBorder else BorderSubtle, RoundedCornerShape(8.dp))
+                                    .padding(horizontal = 6.dp, vertical = 2.dp)
                             ) {
                                 Text(
-                                    "$onlineCount",
-                                    fontSize = 9.sp,
+                                    "$onlineCount/${devices.size}",
+                                    fontSize = 10.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = OnlineText
+                                    color = if (onlineCount > 0) OnlineText else TextMuted,
+                                    fontFamily = FontFamily.Monospace
                                 )
                             }
                         }
                     }
                 },
                 actions = {
+                    // Fleet Overview vs Server Pager Toggle
+                    IconButton(
+                        onClick = { showFleetOverview = !showFleetOverview },
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (showFleetOverview) Icons.Default.ViewCarousel else Icons.Default.GridView,
+                            contentDescription = if (showFleetOverview) "Server Pages" else "Multi-Server Fleet",
+                            tint = if (showFleetOverview) GreenVibrant else TextSecondary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+
                     // Update Button (only when update is ready)
                     if (availableUpdate != null) {
                         IconButton(
                             onClick = { showUpdateDialog = true },
-                            modifier = Modifier.size(30.dp)
+                            modifier = Modifier.size(32.dp)
                         ) {
                             Box(contentAlignment = Alignment.TopEnd) {
                                 Icon(
@@ -418,7 +463,7 @@ fun MainScreen(
                             historyLogs = historyRepository.getLogs()
                             showHistoryDialog = true
                         },
-                        modifier = Modifier.size(30.dp)
+                        modifier = Modifier.size(32.dp)
                     ) {
                         Icon(
                             Icons.Default.History,
@@ -431,7 +476,7 @@ fun MainScreen(
                     // Settings Button
                     IconButton(
                         onClick = { showSettingsDialog = true },
-                        modifier = Modifier.size(30.dp)
+                        modifier = Modifier.size(32.dp)
                     ) {
                         Icon(
                             Icons.Default.Settings,
@@ -443,13 +488,16 @@ fun MainScreen(
 
                     // Add Device Button
                     IconButton(
-                        onClick = { coroutineScope.launch { pagerState.animateScrollToPage(devices.size) } },
-                        modifier = Modifier.size(30.dp)
+                        onClick = {
+                            showFleetOverview = false
+                            coroutineScope.launch { pagerState.animateScrollToPage(devices.size) }
+                        },
+                        modifier = Modifier.size(32.dp)
                     ) {
                         Icon(
                             Icons.Default.Add,
                             "Add Device",
-                            tint = GreenVibrant,
+                            tint = currentActiveAccent,
                             modifier = Modifier.size(19.dp)
                         )
                     }
@@ -460,97 +508,225 @@ fun MainScreen(
             )
         },
         bottomBar = {
-            val total = devices.size + 1
-            if (total > 1) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 14.dp),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    repeat(total) { i ->
-                        val selected = pagerState.currentPage == i
-                        val isAdd    = i == devices.size
-                        val dotColor = when {
-                            selected && !isAdd -> GreenVibrant
-                            selected           -> TextSecondary
-                            isAdd              -> TextMuted.copy(alpha = 0.4f)
-                            else               -> TextMuted.copy(alpha = 0.3f)
-                        }
-                        Box(
-                            modifier = Modifier
-                                .padding(horizontal = 4.dp)
-                                .size(if (selected) 8.dp else 6.dp)
-                                .clip(CircleShape)
-                                .background(dotColor)
-                                .clickable {
-                                    coroutineScope.launch {
-                                        pagerState.animateScrollToPage(i)
+            if (!showFleetOverview) {
+                val total = devices.size + 1
+                if (total > 1) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 12.dp),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        repeat(total) { i ->
+                            val selected = pagerState.currentPage == i
+                            val isAdd    = i == devices.size
+                            val itemAccent = if (!isAdd) ServerAccents.parseColor(devices[i].accentColorHex) else TextSecondary
+                            val dotColor = when {
+                                selected && !isAdd -> itemAccent
+                                selected           -> TextSecondary
+                                isAdd              -> TextMuted.copy(alpha = 0.4f)
+                                else               -> itemAccent.copy(alpha = 0.35f)
+                            }
+                            Box(
+                                modifier = Modifier
+                                    .padding(horizontal = 4.dp)
+                                    .size(if (selected) 8.dp else 6.dp)
+                                    .clip(CircleShape)
+                                    .background(dotColor)
+                                    .clickable {
+                                        coroutineScope.launch {
+                                            pagerState.animateScrollToPage(i)
+                                        }
                                     }
-                                }
-                        )
+                            )
+                        }
                     }
                 }
             }
         }
     ) { innerPadding ->
-        // Pull to refresh container enclosing HorizontalPager
+        // Pull to refresh container
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
                 .pullRefresh(pullRefreshState)
         ) {
-            HorizontalPager(
-                state = pagerState,
-                modifier = Modifier.fillMaxSize()
-            ) { page ->
-                if (page < devices.size) {
-                    val dev = devices[page]
-                    DevicePage(
-                        device = dev,
-                        isLoading = loadingStates[dev.id] == true,
-                        nodeStatus = nodeStatuses[dev.id],
-                        isCheckingStatus = checkingStatusMap[dev.id] == true,
-                        lastStatus = statusStates[dev.id]?.first,
-                        lastSuccess = statusStates[dev.id]?.second,
-                        onDismissStatus = { statusStates.remove(dev.id) },
-                        onRefreshStatus = { refreshStatus(dev, showIndicator = true) },
-                        onTrigger = { action -> executeAction(dev, action) },
-                        onDelete = { d ->
-                            repository.deleteDevice(d.id)
-                            devices = repository.getDevices()
-                        },
-                        onSyncConfig = { syncEndpoints(true) },
-                        onUpdateDevice = { updated ->
-                            repository.updateDevice(updated)
-                            devices = repository.getDevices()
-                            refreshStatus(updated, showIndicator = true)
-                        },
-                        onRequireBiometric = { title, subtitle, onAuthorized ->
-                            if (appSettings.isBiometricEnabled && BiometricHelper.isBiometricAvailable(context)) {
-                                requestBiometricAuth(title, subtitle) { success ->
-                                    if (success) onAuthorized()
+            if (showFleetOverview) {
+                FleetOverviewPage(
+                    devices = devices,
+                    nodeStatuses = nodeStatuses,
+                    checkingStatusMap = checkingStatusMap,
+                    isSyncing = isSyncing,
+                    onOpenServer = { idx, openDashboard ->
+                        val target = devices.getOrNull(idx)
+                        if (target != null && openDashboard) {
+                            tabOverrides[target.id] = "DASHBOARD"
+                        }
+                        showFleetOverview = false
+                        coroutineScope.launch {
+                            pagerState.animateScrollToPage(idx)
+                        }
+                    },
+                    onAssignAccentColor = { devId, hex ->
+                        repository.updateDeviceAccent(devId, hex)
+                        devices = repository.getDevices()
+                    },
+                    onSyncAllR2 = { syncEndpoints(showToast = true) },
+                    onRefreshAll = {
+                        devices.forEach { refreshStatus(it, showIndicator = true) }
+                    },
+                    onAddServerClick = {
+                        showFleetOverview = false
+                        coroutineScope.launch { pagerState.animateScrollToPage(devices.size) }
+                    }
+                )
+            } else {
+                Column(modifier = Modifier.fillMaxSize()) {
+                    // Quick Multi-Server Accent Switcher Strip
+                    if (devices.isNotEmpty()) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(BgSurface.copy(alpha = 0.7f))
+                                .horizontalScroll(rememberScrollState())
+                                .padding(horizontal = 14.dp, vertical = 8.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            devices.forEachIndexed { idx, dev ->
+                                val accent = ServerAccents.parseColor(dev.accentColorHex)
+                                val isSelected = pagerState.currentPage == idx
+                                val isOnline = nodeStatuses[dev.id]?.isOnline
+                                Row(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .background(if (isSelected) accent.copy(alpha = 0.16f) else BgCard)
+                                        .border(
+                                            1.dp,
+                                            if (isSelected) accent else BorderSubtle,
+                                            RoundedCornerShape(10.dp)
+                                        )
+                                        .clickable {
+                                            coroutineScope.launch { pagerState.animateScrollToPage(idx) }
+                                        }
+                                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .width(4.dp)
+                                            .height(14.dp)
+                                            .clip(RoundedCornerShape(2.dp))
+                                            .background(accent)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Box(
+                                        modifier = Modifier
+                                            .size(6.dp)
+                                            .clip(CircleShape)
+                                            .background(
+                                                when (isOnline) {
+                                                    true -> GreenVibrant
+                                                    false -> RedVibrant
+                                                    null -> TextMuted
+                                                }
+                                            )
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = dev.name,
+                                        fontSize = 11.sp,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                        color = if (isSelected) TextPrimary else TextSecondary
+                                    )
                                 }
-                            } else {
-                                onAuthorized()
+                            }
+
+                            // Fleet Overview chip
+                            Row(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(BgElevated)
+                                    .border(1.dp, BorderSubtle, RoundedCornerShape(10.dp))
+                                    .clickable { showFleetOverview = true }
+                                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    Icons.Default.GridView,
+                                    contentDescription = "All Servers",
+                                    tint = TextSecondary,
+                                    modifier = Modifier.size(13.dp)
+                                )
+                                Spacer(modifier = Modifier.width(5.dp))
+                                Text(
+                                    text = "Fleet",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = TextSecondary
+                                )
                             }
                         }
-                    )
-                } else {
-                    AddDevicePage(
-                        triggerClient = triggerClient,
-                        onDeviceAdded = { newDev ->
-                            repository.addDevice(newDev)
-                            devices = repository.getDevices()
-                            refreshStatus(newDev, showIndicator = true)
-                            coroutineScope.launch {
-                                val idx = devices.indexOfFirst { it.id == newDev.id }
-                                if (idx >= 0) pagerState.animateScrollToPage(idx)
-                            }
+                    }
+
+                    HorizontalPager(
+                        state = pagerState,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f)
+                    ) { page ->
+                        if (page < devices.size) {
+                            val dev = devices[page]
+                            DevicePage(
+                                device = dev,
+                                isLoading = loadingStates[dev.id] == true,
+                                nodeStatus = nodeStatuses[dev.id],
+                                isCheckingStatus = checkingStatusMap[dev.id] == true,
+                                lastStatus = statusStates[dev.id]?.first,
+                                lastSuccess = statusStates[dev.id]?.second,
+                                onDismissStatus = { statusStates.remove(dev.id) },
+                                onRefreshStatus = { refreshStatus(dev, showIndicator = true) },
+                                onTrigger = { action -> executeAction(dev, action) },
+                                onDelete = { d ->
+                                    repository.deleteDevice(d.id)
+                                    devices = repository.getDevices()
+                                },
+                                onSyncConfig = { syncEndpoints(true) },
+                                onUpdateDevice = { updated ->
+                                    repository.updateDevice(updated)
+                                    devices = repository.getDevices()
+                                    refreshStatus(updated, showIndicator = true)
+                                },
+                                onRequireBiometric = { title, subtitle, onAuthorized ->
+                                    if (appSettings.isBiometricEnabled && BiometricHelper.isBiometricAvailable(context)) {
+                                        requestBiometricAuth(title, subtitle) { success ->
+                                            if (success) onAuthorized()
+                                        }
+                                    } else {
+                                        onAuthorized()
+                                    }
+                                },
+                                selectedTabOverride = tabOverrides[dev.id],
+                                onClearTabOverride = { tabOverrides.remove(dev.id) }
+                            )
+                        } else {
+                            AddDevicePage(
+                                triggerClient = triggerClient,
+                                existingDeviceCount = devices.size,
+                                onDeviceAdded = { newDev ->
+                                    repository.addDevice(newDev)
+                                    devices = repository.getDevices()
+                                    refreshStatus(newDev, showIndicator = true)
+                                    coroutineScope.launch {
+                                        val idx = devices.indexOfFirst { it.id == newDev.id }
+                                        if (idx >= 0) pagerState.animateScrollToPage(idx)
+                                    }
+                                }
+                            )
                         }
-                    )
+                    }
                 }
             }
 
@@ -559,7 +735,7 @@ fun MainScreen(
                 state = pullRefreshState,
                 modifier = Modifier.align(Alignment.TopCenter),
                 backgroundColor = BgElevated,
-                contentColor = GreenVibrant
+                contentColor = currentActiveAccent
             )
         }
     }

@@ -88,7 +88,15 @@ class ServerMonitorWorker(
 
         val triggerClient = TriggerClient()
 
-        for (device in devices) {
+        for (savedDevice in devices) {
+            // Fetch latest endpoints from R2 if configured; fall back to cached device config on failure
+            var device = savedDevice
+            if (savedDevice.r2Url.isNotBlank()) {
+                triggerClient.fetchR2ConfigSync(savedDevice.r2Url).onSuccess { ep ->
+                    repository.applyParsedEndpoints(savedDevice.id, ep)
+                    device = repository.getDevices().find { it.id == savedDevice.id } ?: savedDevice
+                }
+            }
             if (device.statusUrl.isBlank()) continue
 
             var status = triggerClient.checkStatusSync(device)

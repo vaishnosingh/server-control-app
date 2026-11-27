@@ -77,7 +77,17 @@ class ActionTriggerWorker(
         }
 
         val repository = DeviceRepository(SharedPrefsStorage(appContext))
-        val device = repository.getDevices().find { it.id == deviceId } ?: return Result.failure()
+        val savedDevice = repository.getDevices().find { it.id == deviceId } ?: return Result.failure()
+
+        val triggerClient = TriggerClient()
+        // Fetch fresh endpoints from R2 URL when configured, keeping saved/hardcoded values as fallback
+        var device = savedDevice
+        if (savedDevice.r2Url.isNotBlank()) {
+            triggerClient.fetchR2ConfigSync(savedDevice.r2Url).onSuccess { ep ->
+                repository.applyParsedEndpoints(savedDevice.id, ep)
+                device = repository.getDevices().find { it.id == savedDevice.id } ?: savedDevice
+            }
+        }
 
         val actionTitle = when (action) {
             TriggerAction.POWER_ON  -> "Power On"
@@ -85,7 +95,6 @@ class ActionTriggerWorker(
             TriggerAction.POWER_OFF -> "Shutdown"
         }
 
-        val triggerClient = TriggerClient()
         val historyRepo = TriggerHistoryRepository(appContext)
         val appSettings = AppSettings(appContext)
 

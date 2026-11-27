@@ -7,6 +7,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -71,9 +72,9 @@ import com.expapp.trigger.network.TriggerAction
 import com.expapp.trigger.ui.components.CpuCard
 import com.expapp.trigger.ui.components.DisksCard
 import com.expapp.trigger.ui.components.RamCard
-import com.expapp.trigger.ui.components.ScheduleServiceDialog
 import com.expapp.trigger.ui.components.ScheduledTaskCard
 import com.expapp.trigger.ui.components.ServiceCard
+import com.expapp.trigger.ui.components.ServiceManageSheet
 import com.expapp.trigger.ui.theme.AmberVibrant
 import com.expapp.trigger.ui.theme.BgCard
 import com.expapp.trigger.ui.theme.BgElevated
@@ -93,6 +94,7 @@ import kotlinx.coroutines.launch
 fun DashboardScreen(
     device: DeviceConfig,
     nodeStatus: NodeStatus?,
+    accentColor: Color = GreenVibrant,
     onBack: () -> Unit,
     onTriggerPowerAction: ((TriggerAction) -> Unit)? = null,
     onRequireBiometric: ((title: String, subtitle: String, onAuthorized: () -> Unit) -> Unit)? = null,
@@ -114,9 +116,9 @@ fun DashboardScreen(
     var isPollingActive by remember { mutableStateOf(true) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
-    var serviceToSchedule by remember { mutableStateOf<SysServiceInfo?>(null) }
+    var managedServiceName by remember { mutableStateOf<String?>(null) }
     var searchQuery by remember { mutableStateOf("") }
-    var filterMode by remember { mutableStateOf("ALL") } // ALL, RUNNING, STOPPED
+    var filterMode by remember { mutableStateOf("ALL") } // ALL, RUNNING, STOPPED, BOOT ON, BOOT OFF
 
     fun refreshData(showIndicator: Boolean = false) {
         if (effectiveUrl.isBlank()) {
@@ -159,7 +161,9 @@ fun DashboardScreen(
 
     fun handleServiceOperation(service: SysServiceInfo, op: ServiceOperation, delaySec: Long? = null) {
         val executeCall = {
-            val delayStr = if (delaySec != null && delaySec > 0) " in ${delaySec / 60}m" else ""
+            val delayStr = if (delaySec != null && delaySec > 0) {
+                if (delaySec < 60) " in ${delaySec}s" else " in ${delaySec / 60}m"
+            } else ""
             Toast.makeText(context, "Executing ${op.displayName} on ${service.name}$delayStr...", Toast.LENGTH_SHORT).show()
 
             sysPulseClient.operateService(
@@ -188,15 +192,31 @@ fun DashboardScreen(
         }
     }
 
-    if (serviceToSchedule != null) {
-        ScheduleServiceDialog(
-            service = serviceToSchedule!!,
-            onConfirm = { op, delaySec ->
-                val s = serviceToSchedule!!
-                serviceToSchedule = null
+    val activeManagedService = remember(managedServiceName, pulseStatus) {
+        val targetName = managedServiceName
+        if (targetName == null) null
+        else pulseStatus?.services?.find { it.name.equals(targetName, ignoreCase = true) || it.unit.equals(targetName, ignoreCase = true) }
+    }
+
+    if (activeManagedService != null) {
+        ServiceManageSheet(
+            service = activeManagedService,
+            accentColor = accentColor,
+            serviceTasks = scheduledTasks.filter { it.serviceName.equals(activeManagedService.name, ignoreCase = true) },
+            onOperate = { s, op, delaySec ->
                 handleServiceOperation(s, op, delaySec)
             },
-            onDismiss = { serviceToSchedule = null }
+            onCancelTask = { t ->
+                sysPulseClient.cancelTask(effectiveUrl, effectiveSecret, t.taskId) { res ->
+                    res.onSuccess { msg ->
+                        Toast.makeText(context, "✅ $msg", Toast.LENGTH_SHORT).show()
+                        refreshData(false)
+                    }.onFailure { err ->
+                        Toast.makeText(context, "❌ ${err.localizedMessage}", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            },
+            onDismiss = { managedServiceName = null }
         )
     }
 
@@ -228,14 +248,22 @@ fun DashboardScreen(
             Spacer(modifier = Modifier.width(6.dp))
 
             Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = "${device.name} • DASHBOARD",
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = TextPrimary,
-                    fontFamily = FontFamily.Monospace,
-                    letterSpacing = 0.5.sp
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(8.dp)
+                            .background(accentColor, CircleShape)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "${device.name} • SYSPULSE",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = TextPrimary,
+                        fontFamily = FontFamily.Monospace,
+                        letterSpacing = 0.5.sp
+                    )
+                }
                 Text(
                     text = if (effectiveUrl.isNotBlank()) effectiveUrl else "SysPulse API Offline",
                     fontSize = 11.sp,
@@ -253,7 +281,7 @@ fun DashboardScreen(
                 Icon(
                     imageVector = if (isPollingActive) Icons.Default.Pause else Icons.Default.PlayArrow,
                     contentDescription = if (isPollingActive) "Pause Polling" else "Resume Polling",
-                    tint = if (isPollingActive) GreenVibrant else TextMuted,
+                    tint = if (isPollingActive) accentColor else TextMuted,
                     modifier = Modifier.size(20.dp)
                 )
             }
@@ -267,7 +295,7 @@ fun DashboardScreen(
                     CircularProgressIndicator(
                         modifier = Modifier.size(16.dp),
                         strokeWidth = 2.dp,
-                        color = GreenVibrant
+                        color = accentColor
                     )
                 } else {
                     Icon(
@@ -312,7 +340,7 @@ fun DashboardScreen(
                             Box(
                                 modifier = Modifier
                                     .size(8.dp)
-                                    .background(GreenVibrant, CircleShape)
+                                    .background(accentColor, CircleShape)
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
@@ -327,7 +355,7 @@ fun DashboardScreen(
                                 text = status.uptime,
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.SemiBold,
-                                color = GreenVibrant,
+                                color = accentColor,
                                 fontFamily = FontFamily.Monospace
                             )
                         }
@@ -479,56 +507,63 @@ fun DashboardScreen(
                         )
                         Spacer(modifier = Modifier.weight(1f))
                         val runningCount = status.services.count { it.active }
+                        val enabledCount = status.services.count { it.enabled }
                         Text(
-                            text = "$runningCount / ${status.services.size} Running",
+                            text = "$runningCount/${status.services.size} Run • $enabledCount Boot",
                             fontSize = 11.sp,
-                            color = GreenVibrant,
+                            color = accentColor,
                             fontFamily = FontFamily.Monospace
                         )
                     }
 
                     // Search & Filter Bar
-                    Row(
+                    Column(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         OutlinedTextField(
                             value = searchQuery,
                             onValueChange = { searchQuery = it },
-                            placeholder = { Text("Filter services...", fontSize = 12.sp) },
+                            placeholder = { Text("Search services or systemd unit...", fontSize = 12.sp) },
                             singleLine = true,
                             leadingIcon = { Icon(Icons.Default.Search, null, modifier = Modifier.size(16.dp)) },
                             colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = GreenVibrant,
+                                focusedBorderColor = accentColor,
                                 unfocusedBorderColor = BorderSubtle,
-                                cursorColor = GreenVibrant,
+                                cursorColor = accentColor,
                                 focusedTextColor = TextPrimary,
                                 unfocusedTextColor = TextPrimary
                             ),
                             shape = RoundedCornerShape(12.dp),
                             modifier = Modifier
-                                .weight(1f)
+                                .fillMaxWidth()
                                 .height(48.dp)
                         )
 
-                        listOf("ALL", "RUNNING", "STOPPED").forEach { mode ->
-                            val isSelected = filterMode == mode
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .background(if (isSelected) GreenVibrant.copy(alpha = 0.2f) else BgElevated)
-                                    .border(1.dp, if (isSelected) GreenVibrant else BorderSubtle, RoundedCornerShape(10.dp))
-                                    .clickable { filterMode = mode }
-                                    .padding(horizontal = 9.dp, vertical = 9.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = mode,
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (isSelected) GreenVibrant else TextSecondary
-                                )
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            listOf("ALL", "RUNNING", "STOPPED", "BOOT ON", "BOOT OFF").forEach { mode ->
+                                val isSelected = filterMode == mode
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .background(if (isSelected) accentColor.copy(alpha = 0.2f) else BgElevated)
+                                        .border(1.dp, if (isSelected) accentColor else BorderSubtle, RoundedCornerShape(10.dp))
+                                        .clickable { filterMode = mode }
+                                        .padding(horizontal = 11.dp, vertical = 7.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = mode,
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (isSelected) accentColor else TextSecondary
+                                    )
+                                }
                             }
                         }
                     }
@@ -541,6 +576,8 @@ fun DashboardScreen(
                         val matchesMode = when (filterMode) {
                             "RUNNING" -> s.active
                             "STOPPED" -> !s.active
+                            "BOOT ON" -> s.enabled
+                            "BOOT OFF" -> !s.enabled
                             else -> true
                         }
                         matchesSearch && matchesMode
@@ -554,7 +591,7 @@ fun DashboardScreen(
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                text = "No services matching '$searchQuery'",
+                                text = "No services matching current filter",
                                 fontSize = 13.sp,
                                 color = TextMuted
                             )
@@ -563,8 +600,9 @@ fun DashboardScreen(
                         filteredServices.forEach { service ->
                             ServiceCard(
                                 service = service,
-                                onOperate = { s, op -> handleServiceOperation(s, op) },
-                                onSchedule = { s -> serviceToSchedule = s }
+                                accentColor = accentColor,
+                                onOpenManage = { s -> managedServiceName = s.name },
+                                onOperate = { s, op -> handleServiceOperation(s, op) }
                             )
                         }
                     }

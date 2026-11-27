@@ -145,5 +145,24 @@ class DeviceRepositoryTest {
         assertEquals("", dev.statusUrl)
         assertEquals("", dev.syspulseUrl)
         assertEquals("", dev.syspulseSecretKey)
+        assertEquals("#22D47E", dev.accentColorHex)
+    }
+
+    @Test
+    fun updateDeviceAccent_updatesAccentColorHex() {
+        val device = DeviceConfig(
+            id = "dev-accent",
+            name = "Fleet Node",
+            node = "debian",
+            secretKey = "Carbon@12",
+            powerOnUrl = "https://on",
+            powerOffUrl = "https://off",
+            rebootUrl = "https://reboot"
+        )
+        repository.addDevice(device)
+
+        val changed = repository.updateDeviceAccent("dev-accent", "#06B6D4")
+        assertTrue(changed)
+        assertEquals("#06B6D4", repository.getDevices().first().accentColorHex)
     }
 }

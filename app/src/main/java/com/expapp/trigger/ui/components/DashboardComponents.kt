@@ -9,6 +9,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,36 +20,47 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DeveloperBoard
 import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.MoreTime
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Storage
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -482,8 +494,9 @@ fun DiskMountRow(disk: DiskMetrics) {
 @Composable
 fun ServiceCard(
     service: SysServiceInfo,
+    accentColor: Color = GreenVibrant,
+    onOpenManage: (SysServiceInfo) -> Unit,
     onOperate: (SysServiceInfo, ServiceOperation) -> Unit,
-    onSchedule: (SysServiceInfo) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val isRunning = service.active && service.state.equals("running", ignoreCase = true)
@@ -495,11 +508,9 @@ fun ServiceCard(
         else -> RedVibrant
     }
 
-    val stateBadgeBg = when {
-        isRunning -> GreenVibrant.copy(alpha = 0.12f)
-        isExited -> AmberVibrant.copy(alpha = 0.12f)
-        else -> RedVibrant.copy(alpha = 0.12f)
-    }
+    val stateBadgeBg = stateBadgeColor.copy(alpha = 0.12f)
+    val bootColor = if (service.enabled) Color(0xFF38BDF8) else TextMuted
+    val bootBg = if (service.enabled) Color(0xFF38BDF8).copy(alpha = 0.12f) else BgElevated
 
     Box(
         modifier = modifier
@@ -507,22 +518,31 @@ fun ServiceCard(
             .clip(RoundedCornerShape(16.dp))
             .background(BgCard)
             .border(1.dp, BorderSubtle, RoundedCornerShape(16.dp))
-            .padding(13.dp)
+            .clickable { onOpenManage(service) }
+            .padding(14.dp)
     ) {
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            // Header: Name, PID & State Badge
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            // Header: Name, PID, Unit & Dual Badges (Runtime State + Boot Auto-Start)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(8.dp)
+                                .background(stateBadgeColor, CircleShape)
+                        )
+                        Spacer(modifier = Modifier.width(7.dp))
                         Text(
                             text = service.name.uppercase(),
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Bold,
                             color = TextPrimary,
-                            letterSpacing = 0.5.sp
+                            letterSpacing = 0.5.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                         if (service.pid != null && service.pid > 0) {
                             Spacer(modifier = Modifier.width(6.dp))
@@ -532,13 +552,13 @@ fun ServiceCard(
                                 color = TextMuted,
                                 fontFamily = FontFamily.Monospace,
                                 modifier = Modifier
-                                    .clip(RoundedCornerShape(4.dp))
+                                    .clip(RoundedCornerShape(5.dp))
                                     .background(BgElevated)
                                     .padding(horizontal = 5.dp, vertical = 2.dp)
                             )
                         }
                     }
-                    Spacer(modifier = Modifier.height(2.dp))
+                    Spacer(modifier = Modifier.height(3.dp))
                     Text(
                         text = service.unit,
                         fontSize = 11.sp,
@@ -549,38 +569,77 @@ fun ServiceCard(
                     )
                 }
 
-                // State Pill Chip
-                Row(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(20.dp))
-                        .background(stateBadgeBg)
-                        .border(1.dp, stateBadgeColor.copy(alpha = 0.5f), RoundedCornerShape(20.dp))
-                        .padding(horizontal = 9.dp, vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(6.dp)
-                            .background(stateBadgeColor, CircleShape)
-                    )
-                    Spacer(modifier = Modifier.width(5.dp))
-                    Text(
-                        text = service.state.uppercase(),
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = stateBadgeColor
-                    )
-                }
+                Icon(
+                    imageVector = Icons.Default.ChevronRight,
+                    contentDescription = "Manage Service",
+                    tint = accentColor.copy(alpha = 0.8f),
+                    modifier = Modifier.size(20.dp)
+                )
             }
 
-            // Action Buttons Row
+            // Dual Status Badges Row: Runtime State + Boot Startup State
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                // Runtime State Pill
+                Row(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(stateBadgeBg)
+                        .border(1.dp, stateBadgeColor.copy(alpha = 0.45f), RoundedCornerShape(8.dp))
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = service.state.uppercase(),
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = stateBadgeColor,
+                        fontFamily = FontFamily.Monospace
+                    )
+                }
+
+                // Boot Enabled / Disabled Pill
+                Row(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(bootBg)
+                        .border(
+                            1.dp,
+                            if (service.enabled) bootColor.copy(alpha = 0.45f) else BorderSubtle,
+                            RoundedCornerShape(8.dp)
+                        )
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.PowerSettingsNew,
+                        contentDescription = null,
+                        tint = bootColor,
+                        modifier = Modifier.size(11.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = if (service.enabled) "BOOT: ON" else "BOOT: OFF",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = bootColor,
+                        fontFamily = FontFamily.Monospace
+                    )
+                }
+            }
+
+            // Compact Quick Action Buttons Row
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 if (!isRunning) {
-                    // Start Button
                     ServiceActionButton(
                         label = "START",
                         icon = Icons.Default.PlayArrow,
@@ -588,7 +647,6 @@ fun ServiceCard(
                         onClick = { onOperate(service, ServiceOperation.START) }
                     )
                 } else {
-                    // Stop Button
                     ServiceActionButton(
                         label = "STOP",
                         icon = Icons.Default.Stop,
@@ -597,7 +655,6 @@ fun ServiceCard(
                     )
                 }
 
-                // Restart Button
                 ServiceActionButton(
                     label = "RESTART",
                     icon = Icons.Default.RestartAlt,
@@ -605,15 +662,529 @@ fun ServiceCard(
                     onClick = { onOperate(service, ServiceOperation.RESTART) }
                 )
 
-                // Schedule Timer Button
+                // Quick Boot Enable / Disable toggle button
                 ServiceActionButton(
-                    label = "TIMER",
-                    icon = Icons.Default.MoreTime,
-                    color = Color(0xFF38BDF8),
-                    onClick = { onSchedule(service) }
+                    label = if (service.enabled) "DISABLE" else "ENABLE",
+                    icon = Icons.Default.PowerSettingsNew,
+                    color = if (service.enabled) RedVibrant else Color(0xFF38BDF8),
+                    onClick = {
+                        onOperate(
+                            service,
+                            if (service.enabled) ServiceOperation.DISABLE else ServiceOperation.ENABLE
+                        )
+                    }
+                )
+
+                ServiceActionButton(
+                    label = "MANAGE",
+                    icon = Icons.Default.Tune,
+                    color = accentColor,
+                    onClick = { onOpenManage(service) }
                 )
             }
         }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ServiceManageSheet(
+    service: SysServiceInfo,
+    accentColor: Color,
+    serviceTasks: List<ScheduledTask>,
+    onOperate: (SysServiceInfo, ServiceOperation, Long?) -> Unit,
+    onCancelTask: (ScheduledTask) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val isRunning = service.active && service.state.equals("running", ignoreCase = true)
+    val isExited = service.state.equals("exited", ignoreCase = true)
+    val stateColor = when {
+        isRunning -> GreenVibrant
+        isExited -> AmberVibrant
+        else -> RedVibrant
+    }
+
+    var selectedDelayOp by remember(service.name, service.active, service.enabled) {
+        mutableStateOf(if (service.active) ServiceOperation.STOP else ServiceOperation.START)
+    }
+    var selectedDelaySeconds by remember { mutableStateOf(60L) }
+    var customMinutesText by remember { mutableStateOf("") }
+    val presetSeconds = listOf(30L to "30s", 60L to "1m", 300L to "5m", 900L to "15m", 1800L to "30m", 3600L to "1h")
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = BgSurface,
+        contentColor = TextPrimary,
+        shape = RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 28.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            // ── HERO SERVICE HEADER ──────────────────────────────────────
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(46.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(accentColor.copy(alpha = 0.14f))
+                        .border(1.dp, accentColor.copy(alpha = 0.4f), RoundedCornerShape(14.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Tune,
+                        contentDescription = null,
+                        tint = accentColor,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(12.dp))
+
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = service.name.uppercase(),
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = TextPrimary,
+                        letterSpacing = 0.6.sp
+                    )
+                    Text(
+                        text = service.unit,
+                        fontSize = 12.sp,
+                        color = TextSecondary,
+                        fontFamily = FontFamily.Monospace
+                    )
+                }
+
+                IconButton(onClick = onDismiss) {
+                    Icon(Icons.Default.Close, contentDescription = "Close", tint = TextMuted)
+                }
+            }
+
+            // Status Badges Strip
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(stateColor.copy(alpha = 0.14f))
+                        .border(1.dp, stateColor.copy(alpha = 0.45f), RoundedCornerShape(10.dp))
+                        .padding(horizontal = 10.dp, vertical = 5.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(7.dp)
+                            .background(stateColor, CircleShape)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = service.state.uppercase(),
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = stateColor,
+                        fontFamily = FontFamily.Monospace
+                    )
+                }
+
+                val bootChipColor = if (service.enabled) Color(0xFF38BDF8) else AmberVibrant
+                Row(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(bootChipColor.copy(alpha = 0.12f))
+                        .border(1.dp, bootChipColor.copy(alpha = 0.4f), RoundedCornerShape(10.dp))
+                        .padding(horizontal = 10.dp, vertical = 5.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = if (service.enabled) "ENABLED ON BOOT" else "DISABLED ON BOOT",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = bootChipColor,
+                        fontFamily = FontFamily.Monospace
+                    )
+                }
+
+                if (service.pid != null && service.pid > 0) {
+                    Text(
+                        text = "PID ${service.pid}",
+                        fontSize = 11.sp,
+                        color = TextSecondary,
+                        fontFamily = FontFamily.Monospace,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(BgElevated)
+                            .border(1.dp, BorderSubtle, RoundedCornerShape(10.dp))
+                            .padding(horizontal = 9.dp, vertical = 5.dp)
+                    )
+                }
+            }
+
+            HorizontalDivider(color = BorderSubtle)
+
+            // ── SECTION 1: RUNTIME LIFECYCLE CONTROLS ────────────────────
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    text = "RUNTIME LIFECYCLE",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = TextMuted,
+                    letterSpacing = 1.sp
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    SheetActionTile(
+                        label = "Start",
+                        icon = Icons.Default.PlayArrow,
+                        color = GreenVibrant,
+                        enabled = !isRunning,
+                        onClick = { onOperate(service, ServiceOperation.START, null) },
+                        modifier = Modifier.weight(1f)
+                    )
+                    SheetActionTile(
+                        label = "Stop",
+                        icon = Icons.Default.Stop,
+                        color = RedVibrant,
+                        enabled = isRunning || service.active,
+                        onClick = { onOperate(service, ServiceOperation.STOP, null) },
+                        modifier = Modifier.weight(1f)
+                    )
+                    SheetActionTile(
+                        label = "Restart",
+                        icon = Icons.Default.RestartAlt,
+                        color = AmberVibrant,
+                        enabled = true,
+                        onClick = { onOperate(service, ServiceOperation.RESTART, null) },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+
+            // ── SECTION 2: BOOT AUTO-START (ENABLE / DISABLE) ────────────
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(BgCard)
+                    .border(1.dp, BorderSubtle, RoundedCornerShape(16.dp))
+                    .padding(14.dp)
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Boot Auto-Start (systemd)",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = TextPrimary
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = if (service.enabled) {
+                                    "Service starts automatically when host boots"
+                                } else {
+                                    "Manual start only — disabled on boot"
+                                },
+                                fontSize = 11.sp,
+                                color = TextSecondary
+                            )
+                        }
+                        Switch(
+                            checked = service.enabled,
+                            onCheckedChange = { enable ->
+                                onOperate(
+                                    service,
+                                    if (enable) ServiceOperation.ENABLE else ServiceOperation.DISABLE,
+                                    null
+                                )
+                            },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = Color(0xFF38BDF8),
+                                checkedTrackColor = Color(0xFF38BDF8).copy(alpha = 0.3f),
+                                uncheckedThumbColor = TextMuted,
+                                uncheckedTrackColor = BgElevated
+                            )
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = { onOperate(service, ServiceOperation.ENABLE, null) },
+                            enabled = !service.enabled,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFF38BDF8).copy(alpha = 0.16f),
+                                disabledContainerColor = BgElevated
+                            ),
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(
+                                text = "Enable on Boot",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (!service.enabled) Color(0xFF38BDF8) else TextMuted
+                            )
+                        }
+
+                        Button(
+                            onClick = { onOperate(service, ServiceOperation.DISABLE, null) },
+                            enabled = service.enabled,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = RedVibrant.copy(alpha = 0.15f),
+                                disabledContainerColor = BgElevated
+                            ),
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(
+                                text = "Disable on Boot",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (service.enabled) RedVibrant else TextMuted
+                            )
+                        }
+                    }
+                }
+            }
+
+            // ── SECTION 3: PENDING TASKS FOR THIS SERVICE ────────────────
+            if (serviceTasks.isNotEmpty()) {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        text = "PENDING SCHEDULED ACTIONS (${serviceTasks.size})",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = AmberVibrant,
+                        letterSpacing = 0.8.sp
+                    )
+                    serviceTasks.forEach { task ->
+                        ScheduledTaskCard(task = task, onCancel = onCancelTask)
+                    }
+                }
+            }
+
+            // ── SECTION 4: SCHEDULE / DELAYED EXECUTION ──────────────────
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(BgCard)
+                    .border(1.dp, BorderSubtle, RoundedCornerShape(16.dp))
+                    .padding(14.dp)
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            Icons.Default.Schedule,
+                            contentDescription = null,
+                            tint = accentColor,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "SCHEDULE DELAYED ACTION",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = TextPrimary,
+                            letterSpacing = 0.8.sp
+                        )
+                    }
+
+                    // All 5 operations supported cleanly
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        listOf(
+                            ServiceOperation.START,
+                            ServiceOperation.STOP,
+                            ServiceOperation.RESTART,
+                            ServiceOperation.ENABLE,
+                            ServiceOperation.DISABLE
+                        ).forEach { op ->
+                            val isSelected = selectedDelayOp == op
+                            val opColor = when (op) {
+                                ServiceOperation.START -> GreenVibrant
+                                ServiceOperation.STOP, ServiceOperation.DISABLE -> RedVibrant
+                                ServiceOperation.RESTART -> AmberVibrant
+                                ServiceOperation.ENABLE -> Color(0xFF38BDF8)
+                            }
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(9.dp))
+                                    .background(if (isSelected) opColor.copy(alpha = 0.2f) else BgElevated)
+                                    .border(
+                                        1.dp,
+                                        if (isSelected) opColor else BorderSubtle,
+                                        RoundedCornerShape(9.dp)
+                                    )
+                                    .clickable { selectedDelayOp = op }
+                                    .padding(horizontal = 11.dp, vertical = 7.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = op.name,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isSelected) opColor else TextSecondary
+                                )
+                            }
+                        }
+                    }
+
+                    // Presets
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        presetSeconds.forEach { (sec, label) ->
+                            val isSelected = selectedDelaySeconds == sec && customMinutesText.isBlank()
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(if (isSelected) accentColor.copy(alpha = 0.2f) else BgElevated)
+                                    .border(
+                                        1.dp,
+                                        if (isSelected) accentColor else BorderSubtle,
+                                        RoundedCornerShape(8.dp)
+                                    )
+                                    .clickable {
+                                        selectedDelaySeconds = sec
+                                        customMinutesText = ""
+                                    }
+                                    .padding(vertical = 8.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = label,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isSelected) accentColor else TextSecondary
+                                )
+                            }
+                        }
+                    }
+
+                    OutlinedTextField(
+                        value = customMinutesText,
+                        onValueChange = {
+                            val clean = it.filter { ch -> ch.isDigit() }
+                            customMinutesText = clean
+                            clean.toLongOrNull()?.let { m ->
+                                if (m > 0) selectedDelaySeconds = m * 60L
+                            }
+                        },
+                        label = { Text("Or custom delay (minutes)") },
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = accentColor,
+                            unfocusedBorderColor = BorderDefault,
+                            cursorColor = accentColor,
+                            focusedLabelColor = accentColor,
+                            focusedTextColor = TextPrimary,
+                            unfocusedTextColor = TextPrimary
+                        ),
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    val delayDisplay = if (selectedDelaySeconds < 60) {
+                        "${selectedDelaySeconds}s"
+                    } else {
+                        "${selectedDelaySeconds / 60}m"
+                    }
+                    Button(
+                        onClick = {
+                            if (selectedDelaySeconds > 0) {
+                                onOperate(service, selectedDelayOp, selectedDelaySeconds)
+                            }
+                        },
+                        enabled = selectedDelaySeconds > 0,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = accentColor.copy(alpha = 0.2f)
+                        ),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(
+                            Icons.Default.MoreTime,
+                            contentDescription = null,
+                            tint = accentColor,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Schedule ${selectedDelayOp.displayName} in $delayDisplay",
+                            color = accentColor,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SheetActionTile(
+    label: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    color: Color,
+    enabled: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(14.dp))
+            .background(if (enabled) color.copy(alpha = 0.13f) else BgCard)
+            .border(
+                1.dp,
+                if (enabled) color.copy(alpha = 0.4f) else BorderSubtle,
+                RoundedCornerShape(14.dp)
+            )
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(vertical = 12.dp, horizontal = 8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(5.dp)
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = label,
+            tint = if (enabled) color else TextMuted.copy(alpha = 0.5f),
+            modifier = Modifier.size(20.dp)
+        )
+        Text(
+            text = label,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Bold,
+            color = if (enabled) color else TextMuted.copy(alpha = 0.6f)
+        )
     }
 }
 

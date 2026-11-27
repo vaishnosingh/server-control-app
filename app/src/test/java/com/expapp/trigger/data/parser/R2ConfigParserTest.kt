@@ -84,4 +84,63 @@ class R2ConfigParserTest {
         val result = R2ConfigParser.parse(invalid)
         assertTrue(result.isFailure)
     }
+
+    @Test
+    fun parse_withFullServerMetadataAndAccent_returnsMetadata() {
+        val json = """
+            {
+                "name": "Production Node",
+                "node": "prod-01",
+                "secret": "ProdSecret",
+                "accent_color": "#06B6D4",
+                "poweron": "https://cosmos.linuxguy.space/poweron",
+                "poweroff": "https://cosmos.linuxguy.space/poweroff",
+                "reboot": "https://cosmos.linuxguy.space/reboot",
+                "status": "https://cosmos.linuxguy.space/status",
+                "syspulse": "https://pulse.linuxguy.space",
+                "syspulse_secret": "Carbon@12"
+            }
+        """.trimIndent()
+
+        val result = R2ConfigParser.parse(json)
+        assertTrue(result.isSuccess)
+        val ep = result.getOrThrow()
+        assertEquals("Production Node", ep.name)
+        assertEquals("prod-01", ep.node)
+        assertEquals("ProdSecret", ep.secretKey)
+        assertEquals("#06B6D4", ep.accentColor)
+        assertEquals("https://pulse.linuxguy.space", ep.syspulse)
+        assertEquals("Carbon@12", ep.syspulseSecret)
+    }
+
+    @Test
+    fun parseList_withMultipleServers_returnsAllEntries() {
+        val json = """
+            {
+                "servers": [
+                    {
+                        "name": "Alpha",
+                        "accent_color": "#22D47E",
+                        "poweron": "https://a.example/on",
+                        "poweroff": "https://a.example/off",
+                        "reboot": "https://a.example/reboot"
+                    },
+                    {
+                        "name": "Beta",
+                        "accent_color": "#3B82F6",
+                        "poweron": "https://b.example/on",
+                        "poweroff": "https://b.example/off",
+                        "reboot": "https://b.example/reboot"
+                    }
+                ]
+            }
+        """.trimIndent()
+
+        val result = R2ConfigParser.parseList(json)
+        assertTrue(result.isSuccess)
+        val list = result.getOrThrow()
+        assertEquals(2, list.size)
+        assertEquals("Alpha", list[0].name)
+        assertEquals("#3B82F6", list[1].accentColor)
+    }
 }

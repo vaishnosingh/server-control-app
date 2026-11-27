@@ -184,6 +184,8 @@ class SysPulseClient(
 
     /**
      * Executes an immediate or scheduled service operation (start, stop, restart, enable, disable).
+     * Dedicated /api/service/enable and /api/service/disable endpoints are used for enable/disable
+     * with automatic fallback to /api/service/operate if the backend returns 404.
      */
     fun operateService(
         baseUrl: String,
@@ -193,15 +195,54 @@ class SysPulseClient(
         delaySeconds: Long? = null,
         onResult: (Result<String>) -> Unit
     ) {
-        val url = "${baseUrl.removeSuffix("/")}/api/service/operate"
+        val cleanBase = baseUrl.removeSuffix("/")
+        val useDedicatedEndpoint =
+            operation == ServiceOperation.ENABLE || operation == ServiceOperation.DISABLE
+
+        val endpointPath = when (operation) {
+            ServiceOperation.ENABLE -> "/api/service/enable"
+            ServiceOperation.DISABLE -> "/api/service/disable"
+            else -> "/api/service/operate"
+        }
+
+        executeServiceCall(
+            baseUrl = cleanBase,
+            endpointPath = endpointPath,
+            secretKey = secretKey,
+            serviceName = serviceName,
+            operation = operation,
+            delaySeconds = delaySeconds,
+            includeOperationField = !useDedicatedEndpoint,
+            allowOperateFallback = useDedicatedEndpoint,
+            onResult = onResult
+        )
+    }
+
+    private fun executeServiceCall(
+        baseUrl: String,
+        endpointPath: String,
+        secretKey: String,
+        serviceName: String,
+        operation: ServiceOperation,
+        delaySeconds: Long?,
+        includeOperationField: Boolean,
+        allowOperateFallback: Boolean,
+        onResult: (Result<String>) -> Unit
+    ) {
+        val url = "$baseUrl$endpointPath"
         val payload = JsonObject().apply {
             addProperty("servicename", serviceName)
-            addProperty("operation", operation.apiName)
+            if (includeOperationField) {
+                addProperty("operation", operation.apiName)
+            }
             if (delaySeconds != null && delaySeconds > 0) {
-                if (operation == ServiceOperation.START) {
-                    addProperty("time_to_start_after", delaySeconds)
-                } else if (operation == ServiceOperation.STOP) {
-                    addProperty("time_to_stop_after", delaySeconds)
+                addProperty("delay_seconds", delaySeconds)
+                when (operation) {
+                    ServiceOperation.START -> addProperty("time_to_start_after", delaySeconds)
+                    ServiceOperation.STOP -> addProperty("time_to_stop_after", delaySeconds)
+                    ServiceOperation.ENABLE -> addProperty("time_to_enable_after", delaySeconds)
+                    ServiceOperation.DISABLE -> addProperty("time_to_disable_after", delaySeconds)
+                    ServiceOperation.RESTART -> Unit
                 }
             }
         }
@@ -221,7 +262,32 @@ class SysPulseClient(
             override fun onResponse(call: Call, response: Response) {
                 response.use { res ->
                     if (res.code == 401 && secretKey != DEFAULT_FALLBACK_SECRET) {
-                        operateService(baseUrl, DEFAULT_FALLBACK_SECRET, serviceName, operation, delaySeconds, onResult)
+                        executeServiceCall(
+                            baseUrl = baseUrl,
+                            endpointPath = endpointPath,
+                            secretKey = DEFAULT_FALLBACK_SECRET,
+                            serviceName = serviceName,
+                            operation = operation,
+                            delaySeconds = delaySeconds,
+                            includeOperationField = includeOperationField,
+                            allowOperateFallback = allowOperateFallback,
+                            onResult = onResult
+                        )
+                        return
+                    }
+
+                    if (res.code == 404 && allowOperateFallback) {
+                        executeServiceCall(
+                            baseUrl = baseUrl,
+                            endpointPath = "/api/service/operate",
+                            secretKey = secretKey,
+                            serviceName = serviceName,
+                            operation = operation,
+                            delaySeconds = delaySeconds,
+                            includeOperationField = true,
+                            allowOperateFallback = false,
+                            onResult = onResult
+                        )
                         return
                     }
 

@@ -32,7 +32,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material.icons.filled.DeleteOutline
@@ -80,9 +83,12 @@ import com.expapp.trigger.data.model.SysPulseStatus
 import com.expapp.trigger.network.NodeStatus
 import com.expapp.trigger.network.SysPulseClient
 import com.expapp.trigger.network.TriggerAction
+import com.expapp.trigger.ui.components.AccentColorDialog
+import com.expapp.trigger.ui.components.AccentColorPickerRow
 import com.expapp.trigger.ui.components.ActionConfirmDialog
 import com.expapp.trigger.ui.components.HugeActionButton
 import com.expapp.trigger.ui.components.StatusBanner
+import com.expapp.trigger.ui.theme.ServerAccents
 import com.expapp.trigger.ui.theme.AmberVibrant
 import com.expapp.trigger.ui.theme.BgCard
 import com.expapp.trigger.ui.theme.BgElevated
@@ -122,12 +128,24 @@ fun DevicePage(
     onSyncConfig: () -> Unit = {},
     onUpdateDevice: (DeviceConfig) -> Unit = {},
     onRequireBiometric: ((title: String, subtitle: String, onAuthorized: () -> Unit) -> Unit)? = null,
+    selectedTabOverride: String? = null,
+    onClearTabOverride: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
-    var selectedTab by remember { mutableStateOf("CONTROL") }
+    var selectedTab by remember(device.id) { mutableStateOf("CONTROL") }
+    LaunchedEffect(selectedTabOverride) {
+        if (selectedTabOverride != null) {
+            selectedTab = selectedTabOverride
+            onClearTabOverride()
+        }
+    }
+
+    val serverAccent = ServerAccents.parseColor(device.accentColorHex)
+
     var pendingAction by remember { mutableStateOf<TriggerAction?>(null) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var showEditDialog by remember { mutableStateOf(false) }
+    var showAccentDialog by remember { mutableStateOf(false) }
     var showMenu by remember { mutableStateOf(false) }
 
     // If Dashboard mode is selected, render full-screen interactive dashboard
@@ -135,12 +153,24 @@ fun DevicePage(
         DashboardScreen(
             device = device,
             nodeStatus = nodeStatus,
+            accentColor = serverAccent,
             onBack = { selectedTab = "CONTROL" },
             onTriggerPowerAction = onTrigger,
             onRequireBiometric = onRequireBiometric,
             modifier = modifier
         )
         return
+    }
+
+    if (showAccentDialog) {
+        AccentColorDialog(
+            serverName = device.name,
+            selectedHex = device.accentColorHex,
+            onSelectHex = { hex ->
+                onUpdateDevice(device.copy(accentColorHex = hex))
+            },
+            onDismiss = { showAccentDialog = false }
+        )
     }
 
     if (showEditDialog) {
@@ -150,14 +180,15 @@ fun DevicePage(
         var editSecretKey by remember { mutableStateOf(device.secretKey) }
         var editSyspulseUrl by remember { mutableStateOf(device.syspulseUrl) }
         var editSyspulseSecret by remember { mutableStateOf(device.syspulseSecretKey) }
+        var editAccentHex by remember { mutableStateOf(device.accentColorHex) }
         var showKey by remember { mutableStateOf(false) }
 
         val editFieldColors = OutlinedTextFieldDefaults.colors(
-            focusedBorderColor = GreenVibrant,
+            focusedBorderColor = serverAccent,
             unfocusedBorderColor = BorderDefault,
-            focusedLabelColor = GreenVibrant,
+            focusedLabelColor = serverAccent,
             unfocusedLabelColor = TextSecondary,
-            cursorColor = GreenVibrant,
+            cursorColor = serverAccent,
             focusedTextColor = TextPrimary,
             unfocusedTextColor = TextPrimary
         )
@@ -166,9 +197,12 @@ fun DevicePage(
             onDismissRequest = { showEditDialog = false },
             containerColor = BgSurface,
             shape = RoundedCornerShape(20.dp),
-            title = { Text("Edit Device", color = TextPrimary, fontWeight = FontWeight.Bold) },
+            title = { Text("Edit Server", color = TextPrimary, fontWeight = FontWeight.Bold) },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Column(
+                    modifier = Modifier.verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
                     OutlinedTextField(
                         value = editName,
                         onValueChange = { editName = it },
@@ -218,7 +252,7 @@ fun DevicePage(
                     OutlinedTextField(
                         value = editSyspulseUrl,
                         onValueChange = { editSyspulseUrl = it },
-                        label = { Text("SysPulse API URL (e.g. http://100.85.63.44:8088)") },
+                        label = { Text("SysPulse API URL (e.g. https://pulse.linuxguy.space)") },
                         singleLine = true,
                         colors = editFieldColors,
                         shape = RoundedCornerShape(12.dp),
@@ -233,6 +267,18 @@ fun DevicePage(
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.fillMaxWidth()
                     )
+                    Text(
+                        text = "PAGE ACCENT COLOR",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = TextMuted,
+                        fontFamily = FontFamily.Monospace,
+                        letterSpacing = 0.8.sp
+                    )
+                    AccentColorPickerRow(
+                        selectedHex = editAccentHex,
+                        onSelectHex = { editAccentHex = it }
+                    )
                 }
             },
             confirmButton = {
@@ -245,14 +291,15 @@ fun DevicePage(
                             r2Url = editR2Url.trim(),
                             secretKey = editSecretKey.trim(),
                             syspulseUrl = editSyspulseUrl.trim(),
-                            syspulseSecretKey = editSyspulseSecret.trim()
+                            syspulseSecretKey = editSyspulseSecret.trim(),
+                            accentColorHex = editAccentHex
                         )
                         onUpdateDevice(updated)
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = GreenVibrant.copy(alpha = 0.2f)),
+                    colors = ButtonDefaults.buttonColors(containerColor = serverAccent.copy(alpha = 0.2f)),
                     shape = RoundedCornerShape(12.dp)
                 ) {
-                    Text("Save", color = GreenVibrant, fontWeight = FontWeight.Bold)
+                    Text("Save", color = serverAccent, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
@@ -346,23 +393,19 @@ fun DevicePage(
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(24.dp))
                 .background(Brush.verticalGradient(listOf(BgElevated, BgSurface)))
-                .border(1.dp, BorderSubtle, RoundedCornerShape(24.dp))
+                .border(1.dp, serverAccent.copy(alpha = 0.35f), RoundedCornerShape(24.dp))
         ) {
-            // Top accent line that changes color with server state
+            // Vivid top accent hairline reflecting this server's assigned color
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(1.dp)
+                    .height(3.dp)
                     .background(
                         Brush.horizontalGradient(
                             listOf(
-                                Color.Transparent,
-                                when (isOnline) {
-                                    true  -> GreenVibrant.copy(alpha = 0.7f)
-                                    false -> RedVibrant.copy(alpha = 0.5f)
-                                    null  -> BorderDefault.copy(alpha = 0.4f)
-                                },
-                                Color.Transparent
+                                serverAccent.copy(alpha = 0.25f),
+                                serverAccent,
+                                serverAccent.copy(alpha = 0.25f)
                             )
                         )
                     )
@@ -373,47 +416,35 @@ fun DevicePage(
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 14.dp)
             ) {
-                // Top row: Server Icon + Name / Node (flexible) + Header Actions
+                // Top row: Server Icon + Name / Node (flexible) + Quick Accent & Overflow Menu
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(42.dp)
-                            .clip(RoundedCornerShape(12.dp))
+                            .size(44.dp)
+                            .clip(RoundedCornerShape(13.dp))
                             .background(
                                 Brush.radialGradient(
                                     listOf(
-                                        when (isOnline) {
-                                            true  -> GreenVibrant.copy(alpha = 0.18f)
-                                            false -> RedVibrant.copy(alpha = 0.12f)
-                                            null  -> BorderDefault.copy(alpha = 0.1f)
-                                        },
+                                        serverAccent.copy(alpha = 0.22f),
                                         Color.Transparent
                                     )
                                 )
                             )
                             .border(
                                 1.dp,
-                                when (isOnline) {
-                                    true  -> GreenVibrant.copy(alpha = 0.35f)
-                                    false -> RedVibrant.copy(alpha = 0.25f)
-                                    null  -> BorderSubtle
-                                },
-                                RoundedCornerShape(12.dp)
+                                serverAccent.copy(alpha = 0.5f),
+                                RoundedCornerShape(13.dp)
                             ),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             imageVector = Icons.Default.Terminal,
                             contentDescription = null,
-                            tint = when (isOnline) {
-                                true  -> GreenVibrant
-                                false -> RedVibrant.copy(alpha = 0.6f)
-                                null  -> TextSecondary
-                            },
-                            modifier = Modifier.size(20.dp)
+                            tint = serverAccent,
+                            modifier = Modifier.size(21.dp)
                         )
                     }
 
@@ -426,7 +457,7 @@ fun DevicePage(
                     ) {
                         Text(
                             text = device.name,
-                            fontSize = 17.sp,
+                            fontSize = 18.sp,
                             fontWeight = FontWeight.Bold,
                             color = TextPrimary,
                             maxLines = 1,
@@ -436,15 +467,37 @@ fun DevicePage(
                         Text(
                             text = device.node,
                             fontSize = 11.sp,
-                            color = TextMuted,
+                            color = serverAccent,
                             fontFamily = FontFamily.Monospace,
+                            fontWeight = FontWeight.SemiBold,
                             letterSpacing = 0.5.sp,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
                     }
 
-                    // Device options menu (Edit / Delete)
+                    // 1-tap Page Accent Color button
+                    Box(
+                        modifier = Modifier
+                            .size(34.dp)
+                            .clip(RoundedCornerShape(9.dp))
+                            .background(serverAccent.copy(alpha = 0.14f))
+                            .border(1.dp, serverAccent.copy(alpha = 0.4f), RoundedCornerShape(9.dp))
+                            .clickable { showAccentDialog = true },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(14.dp)
+                                .clip(CircleShape)
+                                .background(serverAccent)
+                                .border(1.5.dp, Color.White.copy(alpha = 0.7f), CircleShape)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(6.dp))
+
+                    // Device options menu (Edit / Sync R2 / Accent / Delete)
                     Box {
                         IconButton(
                             onClick = { showMenu = true },
@@ -470,7 +523,52 @@ fun DevicePage(
                                 .border(1.dp, BorderSubtle, RoundedCornerShape(12.dp))
                         ) {
                             DropdownMenuItem(
-                                text = { Text("Edit Device", color = TextPrimary) },
+                                text = { Text("Refresh Status", color = TextPrimary) },
+                                leadingIcon = {
+                                    Icon(
+                                        Icons.Default.Refresh,
+                                        contentDescription = null,
+                                        tint = serverAccent,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                },
+                                onClick = {
+                                    showMenu = false
+                                    onRefreshStatus()
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Sync from R2", color = TextPrimary) },
+                                leadingIcon = {
+                                    Icon(
+                                        Icons.Default.CloudSync,
+                                        contentDescription = null,
+                                        tint = Color(0xFF38BDF8),
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                },
+                                onClick = {
+                                    showMenu = false
+                                    onSyncConfig()
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Accent Color", color = TextPrimary) },
+                                leadingIcon = {
+                                    Icon(
+                                        Icons.Default.Palette,
+                                        contentDescription = null,
+                                        tint = serverAccent,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                },
+                                onClick = {
+                                    showMenu = false
+                                    showAccentDialog = true
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Edit Server", color = TextPrimary) },
                                 leadingIcon = {
                                     Icon(
                                         Icons.Default.Edit,
@@ -485,7 +583,7 @@ fun DevicePage(
                                 }
                             )
                             DropdownMenuItem(
-                                text = { Text("Remove Device", color = RedVibrant) },
+                                text = { Text("Remove Server", color = RedVibrant) },
                                 leadingIcon = {
                                     Icon(
                                         Icons.Default.DeleteOutline,
@@ -654,7 +752,7 @@ fun DevicePage(
                     .weight(1f)
                     .clip(RoundedCornerShape(10.dp))
                     .background(if (isControl) BgSurface else Color.Transparent)
-                    .then(if (isControl) Modifier.border(1.dp, BorderDefault, RoundedCornerShape(10.dp)) else Modifier)
+                    .then(if (isControl) Modifier.border(1.dp, serverAccent.copy(alpha = 0.5f), RoundedCornerShape(10.dp)) else Modifier)
                     .clickable { selectedTab = "CONTROL" }
                     .padding(vertical = 10.dp),
                 contentAlignment = Alignment.Center
@@ -666,7 +764,7 @@ fun DevicePage(
                     Icon(
                         Icons.Default.PowerSettingsNew,
                         contentDescription = null,
-                        tint = if (isControl) RedVibrant else TextMuted,
+                        tint = if (isControl) serverAccent else TextMuted,
                         modifier = Modifier.size(16.dp)
                     )
                     Text(
@@ -683,7 +781,7 @@ fun DevicePage(
                     .weight(1f)
                     .clip(RoundedCornerShape(10.dp))
                     .background(if (!isControl) BgSurface else Color.Transparent)
-                    .then(if (!isControl) Modifier.border(1.dp, BorderDefault, RoundedCornerShape(10.dp)) else Modifier)
+                    .then(if (!isControl) Modifier.border(1.dp, serverAccent.copy(alpha = 0.5f), RoundedCornerShape(10.dp)) else Modifier)
                     .clickable { selectedTab = "DASHBOARD" }
                     .padding(vertical = 10.dp),
                 contentAlignment = Alignment.Center
@@ -695,7 +793,7 @@ fun DevicePage(
                     Icon(
                         Icons.Default.Speed,
                         contentDescription = null,
-                        tint = if (!isControl) GreenVibrant else TextMuted,
+                        tint = if (!isControl) serverAccent else TextMuted,
                         modifier = Modifier.size(16.dp)
                     )
                     Text(
@@ -715,7 +813,7 @@ fun DevicePage(
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(16.dp))
                     .background(BgElevated)
-                    .border(1.dp, BorderSubtle, RoundedCornerShape(16.dp))
+                    .border(1.dp, serverAccent.copy(alpha = 0.3f), RoundedCornerShape(16.dp))
                     .clickable { selectedTab = "DASHBOARD" }
                     .padding(14.dp)
             ) {
@@ -732,7 +830,7 @@ fun DevicePage(
                             Icon(
                                 Icons.Default.Speed,
                                 contentDescription = null,
-                                tint = GreenVibrant,
+                                tint = serverAccent,
                                 modifier = Modifier.size(14.dp)
                             )
                             Text(
@@ -744,10 +842,10 @@ fun DevicePage(
                             )
                         }
                         Text(
-                            "Full Dashboard ➔",
+                            "Services & Metrics ➔",
                             fontSize = 11.sp,
                             fontWeight = FontWeight.SemiBold,
-                            color = GreenVibrant
+                            color = serverAccent
                         )
                     }
 

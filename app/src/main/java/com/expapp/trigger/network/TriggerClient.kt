@@ -174,6 +174,54 @@ class TriggerClient(
         })
     }
 
+    fun fetchR2ConfigList(
+        url: String,
+        callback: (Result<List<ParsedEndpoints>>) -> Unit
+    ) {
+        val request = try {
+            Request.Builder().url(url).get().build()
+        } catch (e: Exception) {
+            runOnMain { callback(Result.failure(e)) }
+            return
+        }
+
+        client.newCall(request).enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                runOnMain { callback(Result.failure(e)) }
+            }
+
+            override fun onResponse(call: Call, response: Response) {
+                response.use {
+                    if (!it.isSuccessful) {
+                        runOnMain {
+                            callback(Result.failure(IOException("Failed to fetch R2 JSON: HTTP ${it.code}")))
+                        }
+                        return
+                    }
+                    val jsonString = it.body?.string().orEmpty()
+                    val parseResult = R2ConfigParser.parseList(jsonString)
+                    runOnMain { callback(parseResult) }
+                }
+            }
+        })
+    }
+
+    fun fetchR2ConfigSync(url: String): Result<ParsedEndpoints> {
+        return try {
+            val request = Request.Builder().url(url).get().build()
+            val response = client.newCall(request).execute()
+            response.use {
+                if (!it.isSuccessful) {
+                    return Result.failure(IOException("Failed to fetch R2 JSON: HTTP ${it.code}"))
+                }
+                val jsonString = it.body?.string().orEmpty()
+                R2ConfigParser.parse(jsonString)
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     fun checkStatus(
         device: DeviceConfig,
         callback: (NodeStatus) -> Unit

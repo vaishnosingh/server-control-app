@@ -3,6 +3,8 @@ package com.expapp.trigger.data.repository
 import android.content.Context
 import android.content.SharedPreferences
 import com.expapp.trigger.data.model.DeviceConfig
+import com.expapp.trigger.data.model.FallbackConfig
+import com.expapp.trigger.data.parser.ParsedEndpoints
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
 import com.google.gson.JsonDeserializationContext
@@ -71,7 +73,8 @@ class DeviceConfigDeserializer : JsonDeserializer<DeviceConfig> {
             rebootUrl = obj.getStringSafe("rebootUrl"),
             statusUrl = obj.getStringSafe("statusUrl"),
             syspulseUrl = obj.getStringSafe("syspulseUrl"),
-            syspulseSecretKey = obj.getStringSafe("syspulseSecretKey")
+            syspulseSecretKey = obj.getStringSafe("syspulseSecretKey"),
+            accentColorHex = obj.getStringSafe("accentColorHex").ifBlank { FallbackConfig.DEFAULT_ACCENT_HEX }
         )
     }
 }
@@ -109,6 +112,33 @@ class DeviceRepository(private val storage: KeyValueStorage) {
         addDevice(device)
     }
 
+    fun applyParsedEndpoints(deviceId: String, ep: ParsedEndpoints): Boolean {
+        return updateEndpoints(
+            deviceId = deviceId,
+            powerOnUrl = ep.powerOn,
+            powerOffUrl = ep.powerOff,
+            rebootUrl = ep.reboot,
+            statusUrl = ep.status,
+            syspulseUrl = ep.syspulse,
+            syspulseSecretKey = ep.syspulseSecret,
+            secretKey = ep.secretKey,
+            name = ep.name,
+            node = ep.node,
+            accentColorHex = ep.accentColor
+        )
+    }
+
+    fun updateDeviceAccent(deviceId: String, accentColorHex: String): Boolean {
+        val current = getDevices().toMutableList()
+        val index = current.indexOfFirst { it.id == deviceId }
+        if (index != -1 && current[index].accentColorHex != accentColorHex) {
+            current[index] = current[index].copy(accentColorHex = accentColorHex)
+            saveDevices(current)
+            return true
+        }
+        return false
+    }
+
     fun updateEndpoints(
         deviceId: String,
         powerOnUrl: String,
@@ -116,7 +146,11 @@ class DeviceRepository(private val storage: KeyValueStorage) {
         rebootUrl: String,
         statusUrl: String = "",
         syspulseUrl: String = "",
-        syspulseSecretKey: String = ""
+        syspulseSecretKey: String = "",
+        secretKey: String = "",
+        name: String = "",
+        node: String = "",
+        accentColorHex: String = ""
     ): Boolean {
         val current = getDevices().toMutableList()
         val index = current.indexOfFirst { it.id == deviceId }
@@ -125,9 +159,15 @@ class DeviceRepository(private val storage: KeyValueStorage) {
             val effectiveStatusUrl = if (statusUrl.isNotBlank()) statusUrl else old.statusUrl
             val effectiveSyspulseUrl = if (syspulseUrl.isNotBlank()) syspulseUrl else old.syspulseUrl
             val effectiveSyspulseKey = if (syspulseSecretKey.isNotBlank()) syspulseSecretKey else old.syspulseSecretKey
+            val effectiveSecretKey = if (secretKey.isNotBlank()) secretKey else old.secretKey
+            val effectiveName = if (name.isNotBlank()) name else old.name
+            val effectiveNode = if (node.isNotBlank()) node else old.node
+            val effectiveAccent = if (accentColorHex.isNotBlank()) accentColorHex else old.accentColorHex
             if (old.powerOnUrl != powerOnUrl || old.powerOffUrl != powerOffUrl ||
                 old.rebootUrl != rebootUrl || old.statusUrl != effectiveStatusUrl ||
-                old.syspulseUrl != effectiveSyspulseUrl || old.syspulseSecretKey != effectiveSyspulseKey
+                old.syspulseUrl != effectiveSyspulseUrl || old.syspulseSecretKey != effectiveSyspulseKey ||
+                old.secretKey != effectiveSecretKey || old.name != effectiveName ||
+                old.node != effectiveNode || old.accentColorHex != effectiveAccent
             ) {
                 current[index] = old.copy(
                     powerOnUrl = powerOnUrl,
@@ -135,7 +175,11 @@ class DeviceRepository(private val storage: KeyValueStorage) {
                     rebootUrl = rebootUrl,
                     statusUrl = effectiveStatusUrl,
                     syspulseUrl = effectiveSyspulseUrl,
-                    syspulseSecretKey = effectiveSyspulseKey
+                    syspulseSecretKey = effectiveSyspulseKey,
+                    secretKey = effectiveSecretKey,
+                    name = effectiveName,
+                    node = effectiveNode,
+                    accentColorHex = effectiveAccent
                 )
                 saveDevices(current)
                 return true

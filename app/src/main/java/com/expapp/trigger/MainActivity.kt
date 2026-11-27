@@ -24,6 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
 import com.expapp.trigger.data.model.DeviceConfig
+import com.expapp.trigger.data.model.FallbackConfig
 import com.expapp.trigger.data.model.TriggerLog
 import com.expapp.trigger.data.repository.AppSettings
 import com.expapp.trigger.data.repository.DeviceRepository
@@ -116,32 +117,21 @@ class MainActivity : FragmentActivity() {
         if (!hasSeeded) {
             settingsPrefs.edit().putBoolean("has_seeded_default_device", true).apply()
             if (repository.getDevices().isEmpty()) {
-                val defaultDevice = DeviceConfig(
-                    id = "2dc98ae9-9f71-4f29-95a6-a59ac94d7bf6",
-                    name = "Server",
-                    node = "debian",
-                    powerOffUrl = "https://cosmos.linuxguy.space/poweroff?node=debian",
-                    powerOnUrl = "https://trigger.macrodroid.com/87f2f62c-09ee-43cb-8796-fd1a6465754b/wakeserver",
-                    r2Url = "https://bucket.linuxguy.space/home-server-app/endpoints.json",
-                    rebootUrl = "https://cosmos.linuxguy.space/reboot?node=debian",
-                    secretKey = "Carbon@12",
-                    statusUrl = "https://cosmos.linuxguy.space/status?node=debian",
-                    syspulseUrl = "http://100.85.63.44:8088",
-                    syspulseSecretKey = "default_pulse_secret_key_change_me"
-                )
-                repository.addDevice(defaultDevice)
+                repository.addDevice(FallbackConfig.createDefaultDevice())
             }
         }
 
-        // Auto-upgrade existing default device with SysPulse defaults if missing
+        // Migrate any legacy stale local-IP SysPulse defaults to R2 / fallback defaults
         try {
             repository.getDevices().forEach { dev ->
-                val sysUrl = dev.syspulseUrl
-                val nodeName = dev.node
-                if (nodeName.equals("debian", ignoreCase = true) && sysUrl.isBlank()) {
+                val isLegacyUrl = dev.syspulseUrl.isBlank() || dev.syspulseUrl.trim() in FallbackConfig.LEGACY_SYSPULSE_URLS
+                val isLegacyKey = dev.syspulseSecretKey.isBlank() || dev.syspulseSecretKey.trim() in FallbackConfig.LEGACY_SYSPULSE_SECRETS
+                val needsR2Url = dev.r2Url.isBlank() && dev.node.equals(FallbackConfig.DEFAULT_NODE, ignoreCase = true)
+                if (dev.node.equals(FallbackConfig.DEFAULT_NODE, ignoreCase = true) && (isLegacyUrl || isLegacyKey || needsR2Url)) {
                     val upgraded = dev.copy(
-                        syspulseUrl = "http://100.85.63.44:8088",
-                        syspulseSecretKey = if (dev.syspulseSecretKey.isBlank()) "default_pulse_secret_key_change_me" else dev.syspulseSecretKey
+                        r2Url = if (needsR2Url) FallbackConfig.DEFAULT_R2_URL else dev.r2Url,
+                        syspulseUrl = if (isLegacyUrl) FallbackConfig.DEFAULT_SYSPULSE_URL else dev.syspulseUrl,
+                        syspulseSecretKey = if (isLegacyKey) FallbackConfig.DEFAULT_SYSPULSE_SECRET else dev.syspulseSecretKey
                     )
                     repository.updateDevice(upgraded)
                 }
